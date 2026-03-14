@@ -2,7 +2,6 @@
  * CivicDesk — Municipal Authority Portal
  * main.js  (ES module — loaded via <script type="module">)
  *
- * Imports Firebase SDK from gstatic CDN.
  * Leaflet is loaded globally via a <script> tag in index.html.
  */
 
@@ -53,6 +52,17 @@ const PIN_COLORS = {
 };
 
 const TYPE_COLORS = ['#1E6B6E', '#4A9E9F', '#B87A10', '#1A4E8C', '#1A6235', '#8A4A2A'];
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC2is_OzWuquXINoUJ4Z3SU7o2vlb3Izuc",
+  authDomain: "civic-issue-reporter-c4a80.firebaseapp.com",
+  projectId: "civic-issue-reporter-c4a80",
+  storageBucket: "civic-issue-reporter-c4a80.firebasestorage.app",
+  messagingSenderId: "972922286039",
+  appId: "1:972922286039:web:fc5744b3c7649c256ae592",
+};
+
+const FIRESTORE_COLLECTION = 'reports';
 
 
 // ══════════════════════════════
@@ -107,55 +117,21 @@ let selectedMapId = null;
 
 
 // ══════════════════════════════
-//  DEMO DATA (shown before Firebase connects)
-// ══════════════════════════════
+//  FIREBASE ? real-time connection
+// ????????????????????????????????????????????????????????????????
 
-const DEMO = [
-  { id: 'RPT-001', issueType: 'Broken road',              description: 'Large pothole causing tyre damage near the school entrance. Dangerous at night.',                    timestamp: '2025-03-12T06:30:00.000Z', timestampDisplay: '12 Mar 2025, 12:00 PM', location: { latitude: 11.0048, longitude: 76.9659 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 204800, base64Data: null }, { fileName: 'img_2.jpg', mimeType: 'image/jpeg', sizeBytes: 180000, base64Data: null }], status: 'submitted_to_authority', source: 'flutter_mobile_app', assigned: 'Roads & Infra' },
-  { id: 'RPT-002', issueType: 'Water leakage',             description: 'Water pipeline leak on main road. Wasting large volumes since yesterday.',                          timestamp: '2025-03-12T04:15:00.000Z', timestampDisplay: '12 Mar 2025, 09:45 AM', location: { latitude: 10.9834, longitude: 76.9701 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 310000, base64Data: null }],                                                                                                                                           status: 'acknowledged',            source: 'flutter_mobile_app', assigned: 'Water Supply' },
-  { id: 'RPT-003', issueType: 'Garbage overflow',          description: 'Garbage collection missed for 5 days. Bins overflowing onto footpath.',                             timestamp: '2025-03-11T08:20:00.000Z', timestampDisplay: '11 Mar 2025, 01:50 PM', location: { latitude: 11.0101, longitude: 76.9780 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 250000, base64Data: null }, { fileName: 'img_2.jpg', mimeType: 'image/jpeg', sizeBytes: 200000, base64Data: null }, { fileName: 'img_3.jpg', mimeType: 'image/jpeg', sizeBytes: 195000, base64Data: null }], status: 'in_progress',             source: 'flutter_mobile_app', assigned: 'Sanitation' },
-  { id: 'RPT-004', issueType: 'Street light malfunction',  description: 'Three consecutive street lights not working. Area very dark at night.',                             timestamp: '2025-03-11T14:00:00.000Z', timestampDisplay: '11 Mar 2025, 07:30 PM', location: { latitude: 11.0275, longitude: 77.0167 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 160000, base64Data: null }],                                                                                                                                           status: 'submitted_to_authority', source: 'flutter_mobile_app', assigned: 'Electrical Dept' },
-  { id: 'RPT-005', issueType: 'Drainage blockage',         description: 'Main drain completely blocked. Water flooding into homes during rain.',                              timestamp: '2025-03-10T10:30:00.000Z', timestampDisplay: '10 Mar 2025, 04:00 PM', location: { latitude: 10.9634, longitude: 76.9524 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 290000, base64Data: null }, { fileName: 'img_2.jpg', mimeType: 'image/jpeg', sizeBytes: 275000, base64Data: null }, { fileName: 'img_3.jpg', mimeType: 'image/jpeg', sizeBytes: 185000, base64Data: null }, { fileName: 'img_4.jpg', mimeType: 'image/jpeg', sizeBytes: 195000, base64Data: null }], status: 'resolved', source: 'flutter_mobile_app', assigned: 'Sanitation' },
-  { id: 'RPT-006', issueType: 'Other civic issue',         description: 'Stray dogs near bus stand. Aggressive behaviour. Multiple complaints.',                              timestamp: '2025-03-10T05:45:00.000Z', timestampDisplay: '10 Mar 2025, 11:15 AM', location: null,                                              images: [],                                                                                                                                                                                                                                                         status: 'saved_offline',          source: 'flutter_mobile_app', assigned: 'Unassigned' },
-  { id: 'RPT-007', issueType: 'Broken road',              description: 'Road cave-in near entrance of residential colony. Children at risk.',                                 timestamp: '2025-03-09T11:00:00.000Z', timestampDisplay: '09 Mar 2025, 04:30 PM', location: { latitude: 11.0418, longitude: 76.9732 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 320000, base64Data: null }, { fileName: 'img_2.jpg', mimeType: 'image/jpeg', sizeBytes: 305000, base64Data: null }],                                                                      status: 'in_progress',            source: 'flutter_mobile_app', assigned: 'Roads & Infra' },
-  { id: 'RPT-008', issueType: 'Street light malfunction',  description: 'Street light pole fell after storm. Blocking pedestrian path.',                                      timestamp: '2025-03-09T13:30:00.000Z', timestampDisplay: '09 Mar 2025, 07:00 PM', location: { latitude: 11.0015, longitude: 77.0275 }, images: [{ fileName: 'img_1.jpg', mimeType: 'image/jpeg', sizeBytes: 220000, base64Data: null }],                                                                                                                                           status: 'closed',                 source: 'flutter_mobile_app', assigned: 'Electrical Dept' },
-];
+reports  = [];
+filtered = [];
 
-reports  = [...DEMO];
-filtered = [...reports];
-
-
-// ══════════════════════════════
-//  FIREBASE — silent real-time connection
-// ══════════════════════════════
-
-window.connectFirebase = async function () {
-  const cfg = {
-    apiKey:            document.getElementById('fbApiKey').value.trim(),
-    authDomain:        document.getElementById('fbAuthDomain').value.trim(),
-    projectId:         document.getElementById('fbProjectId').value.trim(),
-    storageBucket:     document.getElementById('fbStorageBucket').value.trim(),
-    messagingSenderId: document.getElementById('fbMessagingSenderId').value.trim(),
-    appId:             document.getElementById('fbAppId').value.trim(),
-  };
-  const col = document.getElementById('fbCollection').value.trim() || 'issues';
-
-  if (!cfg.projectId || !cfg.apiKey) {
-    toast('Enter Project ID and API Key', 'err');
-    return;
-  }
-
-  setFbStatus('pulse', 'Connecting…');
-  closeFbModal();
-
+async function connectFirebase() {
   try {
     const existing = getApps();
-    const app = existing.length ? existing[0] : initializeApp(cfg, 'civic-portal');
+    const app = existing.length ? existing[0] : initializeApp(FIREBASE_CONFIG, 'civic-portal');
     db = getFirestore(app);
 
     if (fbUnsub) fbUnsub();
 
-    const q = query(collection(db, col), orderBy('timestamp', 'desc'));
+    const q = query(collection(db, FIRESTORE_COLLECTION), orderBy('timestamp', 'desc'));
     fbUnsub = onSnapshot(
       q,
       (snap) => {
@@ -176,32 +152,23 @@ window.connectFirebase = async function () {
             assigned: data.assigned || ROUTING[data.issueType] || 'Unassigned',
           };
         });
-        reports  = live.length ? live : DEMO;
+        reports  = live;
         filtered = [...reports];
         refreshAll();
-        setFbStatus('live', `Live · ${reports.length} reports`);
       },
       () => {
-        setFbStatus('err', 'Connection error');
+        toast('Firestore connection error', 'err');
       }
     );
   } catch (e) {
-    setFbStatus('err', 'Config error');
+    toast('Firebase config error', 'err');
   }
-};
-
-function setFbStatus(state, label) {
-  const dot = document.getElementById('fbDot');
-  const lbl = document.getElementById('fbLabel');
-  dot.className = 'fb-dot ' + (state === 'live' ? 'live' : state === 'err' ? 'err' : 'pulse');
-  lbl.textContent = label;
 }
 
 async function pushUpdate(id, status, assigned, note) {
   if (!db) return;
   try {
-    const col = document.getElementById('fbCollection')?.value?.trim() || 'issues';
-    await updateDoc(doc(db, col, id), {
+    await updateDoc(doc(db, FIRESTORE_COLLECTION, id), {
       status,
       assigned,
       lastNote: note || '',
@@ -211,7 +178,6 @@ async function pushUpdate(id, status, assigned, note) {
 }
 
 
-// ══════════════════════════════
 //  NAVIGATION
 // ══════════════════════════════
 
@@ -291,7 +257,9 @@ function renderDash() {
       <div class="sc-note">Completed &amp; closed</div>
     </div>`;
 
-  document.getElementById('dashBody').innerHTML = reports.slice(0, 6).map(r => rowHtml(r, true)).join('');
+  document.getElementById('dashBody').innerHTML = reports.length
+    ? reports.slice(0, 6).map(r => rowHtml(r, true)).join('')
+    : `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No data received yet</td></tr>`;
 
   // Priority hotspots
   const typeCounts = computePriorities(reports);
@@ -403,9 +371,10 @@ window.applyFilters = function () {
 
   filtered = data;
   document.getElementById('issueCount').textContent = `${data.length} report${data.length !== 1 ? 's' : ''}`;
+  const emptyMsg = reports.length ? 'No reports match filters' : 'No data received yet';
   document.getElementById('issuesBody').innerHTML = data.length
     ? data.map(r => rowHtml(r, false)).join('')
-    : `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text3)">No reports match filters</td></tr>`;
+    : `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text3)">${emptyMsg}</td></tr>`;
 };
 
 window.clearFilters = function () {
@@ -575,6 +544,7 @@ function renderMapList(data) {
   if (type)   list = list.filter(r => r.issueType === type);
   if (status) list = list.filter(r => r.status === status);
 
+  const emptyMapMsg = reports.length ? 'No reports with GPS location' : 'No data received yet';
   document.getElementById('mapList').innerHTML = list.length
     ? list.map(r => `
         <div class="map-card${selectedMapId === r.id ? ' selected' : ''}" id="mc-${r.id}" onclick="focusPin('${r.id}')">
@@ -585,7 +555,7 @@ function renderMapList(data) {
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">${r.description.slice(0, 60)}…</div>
         </div>`).join('')
-    : `<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">No reports with GPS location</div>`;
+    : `<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">${emptyMapMsg}</div>`;
 }
 
 window.applyMapFilter = function () {
@@ -787,18 +757,10 @@ window.saveUpdate = async function (id) {
 window.openLb = function (idx, reportId) {
   const r   = reports.find(x => x.id === reportId);
   const img = r?.images?.[idx];
-  if (!img?.base64Data) { toast('Image data not available in demo mode', 'info'); return; }
+  if (!img?.base64Data) { toast('Image data not available', 'info'); return; }
   document.getElementById('lbImg').src = `data:${img.mimeType};base64,${img.base64Data}`;
   document.getElementById('lightbox').classList.add('open');
 };
-
-
-// ══════════════════════════════
-//  FIREBASE CONFIG MODAL
-// ══════════════════════════════
-
-window.openFbModal  = () => document.getElementById('fbModal').classList.add('open');
-window.closeFbModal = () => document.getElementById('fbModal').classList.remove('open');
 
 
 // ══════════════════════════════
@@ -895,38 +857,4 @@ window.toast = function (msg, type = 'info') {
 
 renderDash();
 applyFilters();
-setFbStatus('err', 'Not connected');
-
-// Auto-reconnect from saved config in localStorage
-setTimeout(() => {
-  const saved = (() => {
-    try { return JSON.parse(localStorage.getItem('civicFbCfg') || 'null'); }
-    catch (_) { return null; }
-  })();
-  if (saved?.projectId && saved?.apiKey) {
-    document.getElementById('fbApiKey').value             = saved.apiKey;
-    document.getElementById('fbAuthDomain').value         = saved.authDomain           || '';
-    document.getElementById('fbProjectId').value          = saved.projectId;
-    document.getElementById('fbStorageBucket').value      = saved.storageBucket        || '';
-    document.getElementById('fbMessagingSenderId').value  = saved.messagingSenderId    || '';
-    document.getElementById('fbAppId').value              = saved.appId               || '';
-    document.getElementById('fbCollection').value         = saved.collection           || 'issues';
-    window.connectFirebase();
-  }
-}, 100);
-
-// Wrap connectFirebase to persist config to localStorage on each connect
-const _origConnect = window.connectFirebase;
-window.connectFirebase = function () {
-  const cfg = {
-    apiKey:            document.getElementById('fbApiKey').value.trim(),
-    authDomain:        document.getElementById('fbAuthDomain').value.trim(),
-    projectId:         document.getElementById('fbProjectId').value.trim(),
-    storageBucket:     document.getElementById('fbStorageBucket').value.trim(),
-    messagingSenderId: document.getElementById('fbMessagingSenderId').value.trim(),
-    appId:             document.getElementById('fbAppId').value.trim(),
-    collection:        document.getElementById('fbCollection').value.trim(),
-  };
-  try { localStorage.setItem('civicFbCfg', JSON.stringify(cfg)); } catch (_) {}
-  _origConnect();
-};
+connectFirebase();
