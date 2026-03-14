@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CivicDesk — Municipal Authority Portal</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ═══════ TOPBAR ═══════ -->
+  <header class="topbar">
+    <div class="tb-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">CivicDesk</div>
+        <div class="brand-tagline">MUNICIPAL AUTHORITY PORTAL</div>
+      </div>
+    </div>
+    <div class="tb-mid">
+      <div class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="globalSearch" placeholder="Search issue type, location, ID…"/>
+      </div>
+    </div>
+    <div class="tb-right">
+      <!-- Firebase status chip -->
+      <div class="fb-chip" id="fbChip" title="Firebase connection status">
+        <div class="fb-dot pulse" id="fbDot"></div>
+        <span id="fbLabel" style="font-size:12px">Connecting…</span>
+      </div>
+      <div class="av" title="Municipal Admin">MA</div>
+    </div>
+  </header>
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" data-page="dashboard" onclick="nav('dashboard')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" data-page="map" onclick="nav('map')">
+        <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        Map View
+      </div>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section">
+      <div class="nav-label">Management</div>
+      <div class="nav-item" data-page="issues" onclick="nav('issues')">
+        <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        All Issues
+        <span class="nav-count" id="pendingCount">0</span>
+      </div>
+      <div class="nav-item" data-page="analytics" onclick="nav('analytics')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics
+      </div>
+    </div>
+    <!-- Firebase config button -->
+    <div class="sidebar-footer">
+      <button class="fb-config-btn" onclick="openFbModal()">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Configure Firebase
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═══════ MAIN CONTENT ═══════ -->
+  <main class="main">
+
+    <!-- ─── DASHBOARD ─── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-scroll">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Dashboard</div>
+            <div class="page-sub" id="dashDate"></div>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-outline btn-sm" onclick="exportCSV()">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Stat cards -->
+        <div class="stats-row" id="statsRow"></div>
+
+        <!-- Recent reports table -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Recent Reports</span>
+            <button class="btn btn-outline btn-sm" onclick="nav('issues')">View all →</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Issue Type</th><th>Priority</th><th>Description</th><th>Location</th><th>Photos</th><th>Status</th><th>Received</th></tr>
+            </thead>
+            <tbody id="dashBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Bottom 3-column cards -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+          <div class="card" style="padding:18px">
+            <div class="card-title" style="margin-bottom:4px">Priority Hotspots</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Active reports grouped by issue type</div>
+            <div id="priorityHotspots"></div>
+          </div>
+          <div class="card" style="padding:18px">
+            <div class="card-title" style="margin-bottom:14px">Reports by Issue Type</div>
+            <div id="typeChartDash"></div>
+          </div>
+          <div class="card" style="padding:18px">
+            <div class="card-title" style="margin-bottom:14px">Status Breakdown</div>
+            <div id="statusChartDash"></div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /dashboard -->
+
+    <!-- ─── MAP VIEW ─── -->
+    <div class="map-page" id="page-map">
+      <div class="map-sidebar">
+        <div class="map-header">
+          <div style="font-family:var(--head);font-size:13px;font-weight:700;color:var(--text)">Issue Map</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px" id="mapCount">0 reports plotted</div>
+        </div>
+        <div class="map-filter">
+          <select class="fsel" style="flex:1;font-size:11px" id="mapFType" onchange="applyMapFilter()">
+            <option value="">All Types</option>
+            <option>Street light malfunction</option>
+            <option>Broken road</option>
+            <option>Water leakage</option>
+            <option>Garbage overflow</option>
+            <option>Drainage blockage</option>
+            <option>Other civic issue</option>
+          </select>
+          <select class="fsel" style="flex:1;font-size:11px" id="mapFStatus" onchange="applyMapFilter()">
+            <option value="">All Status</option>
+            <option value="saved_offline">Offline</option>
+            <option value="submitted_to_authority">Submitted</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+        <div class="map-list" id="mapList"></div>
+        <div class="map-legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#E85D24"></div>Submitted</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#1E6B6E"></div>In Progress</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#1A6235"></div>Resolved</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#B87A10"></div>Offline</div>
+        </div>
+      </div>
+      <div id="leaflet-map"></div>
+    </div><!-- /map -->
+
+    <!-- ─── ALL ISSUES ─── -->
+    <div class="page" id="page-issues">
+      <div class="page-scroll">
+        <div class="page-head">
+          <div>
+            <div class="page-title">All Issues</div>
+            <div class="page-sub">Filter, assign and update civic reports from the Flutter app</div>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-outline btn-sm" onclick="exportCSV()">Export CSV</button>
+          </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="filter-bar">
+          <select class="fsel" id="fStatus" onchange="applyFilters()">
+            <option value="">All Status</option>
+            <option value="saved_offline">Saved Offline</option>
+            <option value="submitted_to_authority">Submitted</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+          <select class="fsel" id="fType" onchange="applyFilters()">
+            <option value="">All Issue Types</option>
+            <option>Street light malfunction</option>
+            <option>Broken road</option>
+            <option>Water leakage</option>
+            <option>Garbage overflow</option>
+            <option>Drainage blockage</option>
+            <option>Other civic issue</option>
+          </select>
+          <select class="fsel" id="fDept" onchange="applyFilters()">
+            <option value="">All Departments</option>
+            <option>Electrical Dept</option>
+            <option>Roads &amp; Infra</option>
+            <option>Water Supply</option>
+            <option>Sanitation</option>
+            <option>Parks &amp; Env.</option>
+          </select>
+          <select class="fsel" id="fPriority" onchange="applyFilters()">
+            <option value="">All Priority</option>
+            <option value="critical">🔴 Critical</option>
+            <option value="high">🟠 High</option>
+            <option value="medium">🟡 Medium</option>
+            <option value="low">🟢 Low</option>
+          </select>
+          <button class="chip active" onclick="setSort('date',this)">Latest</button>
+          <button class="chip" onclick="setSort('status',this)">By Status</button>
+          <button class="chip" onclick="setSort('priority',this)">By Priority</button>
+          <button class="chip" onclick="clearFilters()">✕ Clear</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Reports</span>
+            <span style="font-size:12px;color:var(--text3)" id="issueCount"></span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>#</th><th>Issue Type</th><th>Priority</th><th>Description</th><th>Location</th><th>Photos</th><th>Status</th><th>Assigned</th><th>Timestamp</th><th></th></tr>
+            </thead>
+            <tbody id="issuesBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div><!-- /issues -->
+
+    <!-- ─── ANALYTICS ─── -->
+    <div class="page" id="page-analytics">
+      <div class="page-scroll">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Analytics</div>
+            <div class="page-sub">Issue trends, category breakdown, department load</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()">Export CSV</button>
+        </div>
+        <div class="stats-row" id="aStatsRow"></div>
+        <div class="analytics-grid">
+          <div class="card" style="padding:18px">
+            <div class="card-title" style="margin-bottom:14px">Volume by Issue Type</div>
+            <div id="typeChartA"></div>
+          </div>
+          <div class="card" style="padding:18px">
+            <div class="card-title" style="margin-bottom:14px">Status Distribution</div>
+            <div id="statusChartA"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px;padding:18px">
+          <div class="card-title" style="margin-bottom:14px">Department Workload</div>
+          <div id="deptChart"></div>
+        </div>
+      </div>
+    </div><!-- /analytics -->
+
+  </main>
+</div><!-- /.shell -->
+
+
+<!-- ═══════ SLIDE PANEL ═══════ -->
+<div class="overlay" id="overlay" onclick="closePanel()"></div>
+<div class="panel" id="panel">
+  <div class="panel-hd">
+    <div class="panel-hd-title" id="panelTitle">Report Details</div>
+    <button class="panel-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+  <div class="panel-ft" id="panelFt"></div>
+</div>
+
+
+<!-- ═══════ FIREBASE CONFIG MODAL ═══════ -->
+<div class="fb-modal" id="fbModal">
+  <div class="fb-box">
+    <div class="fb-box-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E25A1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      </svg>
+      Firebase Configuration
+    </div>
+    <div class="fb-box-sub">
+      Enter your Firebase project credentials. The portal will connect silently to Firestore and load your Flutter app's reports in real time.
+    </div>
+    <div class="fb-grid">
+      <div class="fg"><label>API Key</label><input class="fc" id="fbApiKey" placeholder="AIzaSy…"/></div>
+      <div class="fg"><label>Auth Domain</label><input class="fc" id="fbAuthDomain" placeholder="project.firebaseapp.com"/></div>
+      <div class="fg"><label>Project ID</label><input class="fc" id="fbProjectId" placeholder="your-project-id"/></div>
+      <div class="fg"><label>Storage Bucket</label><input class="fc" id="fbStorageBucket" placeholder="project.appspot.com"/></div>
+      <div class="fg"><label>Messaging Sender ID</label><input class="fc" id="fbMessagingSenderId" placeholder="123456789"/></div>
+      <div class="fg"><label>App ID</label><input class="fc" id="fbAppId" placeholder="1:123:web:abc"/></div>
+    </div>
+    <div class="fg">
+      <label>Firestore Collection Name</label>
+      <input class="fc" id="fbCollection" placeholder="issues" value="issues"/>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:6px">
+      <button class="btn btn-primary" style="flex:1" onclick="connectFirebase()">Connect Firebase</button>
+      <button class="btn btn-outline" onclick="closeFbModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════ IMAGE LIGHTBOX ═══════ -->
+<div class="lightbox" id="lightbox" onclick="document.getElementById('lightbox').classList.remove('open')">
+  <button class="lb-close">✕</button>
+  <img id="lbImg" src="" alt=""/>
+</div>
+
+
+<!-- ═══════ TOAST STACK ═══════ -->
+<div class="toast-stack" id="toasts"></div>
+
+
+<!-- ═══════ SCRIPTS ═══════ -->
+<!-- Leaflet JS (global, loaded before the ES module) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- App logic (ES module — imports Firebase SDK from gstatic CDN) -->
+<script type="module" src="main.js"></script>
+
+</body>
+</html>
