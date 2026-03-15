@@ -101,6 +101,47 @@ function priHTML(level, count) {
 }
 
 
+
+// Normalize Firestore image fields to a consistent shape
+function normalizeImages(data) {
+  const raw =
+    data.images ??
+    data.imageUrls ??
+    data.imageUrl ??
+    data.photoUrl ??
+    data.photoURL ??
+    [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+
+  return arr
+    .filter(Boolean)
+    .map((img, idx) => {
+      if (typeof img === 'string') {
+        return {
+          url: img,
+          fileName: `image-${idx + 1}`,
+        };
+      }
+      const url =
+        img.url ||
+        img.secureUrl ||
+        img.secure_url ||
+        img.imageUrl ||
+        img.downloadURL ||
+        img.downloadUrl ||
+        img.path ||
+        '';
+      return {
+        ...img,
+        url,
+        fileName:
+          img.fileName ||
+          img.name ||
+          (url ? url.split('/').pop()?.split('?')[0] : `image-${idx + 1}`),
+      };
+    });
+}
+
 // ══════════════════════════════
 //  STATE
 // ══════════════════════════════
@@ -146,7 +187,7 @@ async function connectFirebase() {
             location:         data.location
               ? { latitude: data.location.latitude ?? data.location._lat ?? 0, longitude: data.location.longitude ?? data.location._long ?? 0 }
               : null,
-            images:   data.images  || [],
+            images:   normalizeImages(data),
             status:   data.status  || 'submitted_to_authority',
             source:   data.source  || 'flutter_mobile_app',
             assigned: data.assigned || ROUTING[data.issueType] || 'Unassigned',
@@ -601,8 +642,8 @@ window.openPanel = function (id) {
   const imgHtml = r.images?.length
     ? `<div class="img-grid">${r.images.map((img, i) => `
         <div class="img-t" onclick="openLb(${i},'${r.id}')">
-          ${img.base64Data
-            ? `<img src="data:${img.mimeType};base64,${img.base64Data}" alt="${img.fileName}"/>`
+          ${(img.url || img.base64Data)
+            ? `<img src="${img.url ? img.url : `data:${img.mimeType};base64,${img.base64Data}`}" alt="${img.fileName || 'report image'}"/>`
             : `<div class="ph">
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 <span>${img.fileName}</span>
@@ -757,8 +798,10 @@ window.saveUpdate = async function (id) {
 window.openLb = function (idx, reportId) {
   const r   = reports.find(x => x.id === reportId);
   const img = r?.images?.[idx];
-  if (!img?.base64Data) { toast('Image data not available', 'info'); return; }
-  document.getElementById('lbImg').src = `data:${img.mimeType};base64,${img.base64Data}`;
+  if (!img?.url && !img?.base64Data) { toast('Image data not available', 'info'); return; }
+  document.getElementById('lbImg').src = img.url
+    ? img.url
+    : `data:${img.mimeType};base64,${img.base64Data}`;
   document.getElementById('lightbox').classList.add('open');
 };
 
