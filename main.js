@@ -155,6 +155,127 @@ let leafletMap  = null;
 let mapMarkers  = [];
 let panelMap    = null;
 let selectedMapId = null;
+let mapRefreshTimer = null;
+let locationUiRefreshTimer = null;
+
+const locationNameCache = new Map();
+const locationNamePending = new Set();
+const geocodeQueue = [];
+let geocodeRunning = false;
+
+const GEOCODE_DELAY_MS = 350;
+const GEOCODE_ZOOM = 18;
+
+
+function coordKey(lat, lon) {
+  return `${lat.toFixed(5)},${lon.toFixed(5)}`;
+}
+
+function formatAddress(addr) {
+  if (!addr) return '';
+  const block =
+    addr.neighbourhood ||
+    addr.suburb ||
+    addr.quarter ||
+    addr.hamlet ||
+    addr.village;
+  const road =
+    addr.road ||
+    addr.pedestrian ||
+    addr.footway ||
+    addr.cycleway ||
+    addr.path;
+  const district =
+    addr.state_district ||
+    addr.county ||
+    addr.district;
+  const city =
+    addr.city ||
+    addr.town ||
+    addr.village;
+  const state = addr.state;
+
+  const parts = [block || road, city || district, state].filter(Boolean);
+  return parts.join(', ');
+}
+
+function shortenLocationText(name) {
+  if (!name) return '';
+  const parts = name.split(',').map(p => p.trim()).filter(Boolean);
+  const base = parts.slice(0, 3).join(', ');
+  if (base.length <= 42) return base;
+  return base.slice(0, 39).trimEnd() + '…';
+}
+
+async function fetchLocationName(lat, lon) {
+  const key = coordKey(lat, lon);
+  if (locationNameCache.has(key)) return locationNameCache.get(key);
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=${GEOCODE_ZOOM}&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const name = formatAddress(data?.address) || data?.display_name || '';
+    if (name) locationNameCache.set(key, name);
+    return name;
+  } catch (_) {
+    return '';
+  }
+}
+
+function scheduleMapRefresh() {
+  if (mapRefreshTimer) return;
+  mapRefreshTimer = setTimeout(() => {
+    mapRefreshTimer = null;
+    if (leafletMap) updateMapPins(reports);
+  }, 150);
+}
+
+function scheduleLocationUiRefresh() {
+  if (locationUiRefreshTimer) return;
+  locationUiRefreshTimer = setTimeout(() => {
+    locationUiRefreshTimer = null;
+    renderDash();
+    applyFilters();
+    if (leafletMap) renderMapList(reports);
+  }, 200);
+}
+
+function queueReverseGeocode(r) {
+  if (!r?.location || r.locationName) return;
+  const key = coordKey(r.location.latitude, r.location.longitude);
+  if (locationNameCache.has(key)) {
+    r.locationName = locationNameCache.get(key);
+    return;
+  }
+  if (locationNamePending.has(key)) return;
+  locationNamePending.add(key);
+  geocodeQueue.push({ key, report: r });
+  runGeocodeQueue();
+}
+
+async function runGeocodeQueue() {
+  if (geocodeRunning) return;
+  geocodeRunning = true;
+  while (geocodeQueue.length) {
+    const { key, report } = geocodeQueue.shift();
+    const lat = report.location?.latitude;
+    const lon = report.location?.longitude;
+    if (lat && lon) {
+      const name = await fetchLocationName(lat, lon);
+      if (name) {
+        locationNameCache.set(key, name);
+        report.locationName = name;
+        scheduleMapRefresh();
+        scheduleLocationUiRefresh();
+      }
+    }
+    locationNamePending.delete(key);
+    await new Promise(r => setTimeout(r, GEOCODE_DELAY_MS));
+  }
+  geocodeRunning = false;
+}
 
 
 // ══════════════════════════════
@@ -178,6 +299,14 @@ async function connectFirebase() {
       (snap) => {
         const live = snap.docs.map(d => {
           const data = d.data();
+          const locationName =
+            data.locationName ||
+            data.location_label ||
+            data.locationLabel ||
+            data.address ||
+            data.addressText ||
+            data.location?.name ||
+            '';
           return {
             id:               d.id,
             issueType:        data.issueType   || 'Other civic issue',
@@ -187,6 +316,7 @@ async function connectFirebase() {
             location:         data.location
               ? { latitude: data.location.latitude ?? data.location._lat ?? 0, longitude: data.location.longitude ?? data.location._long ?? 0 }
               : null,
+            locationName,
             images:   normalizeImages(data),
             status:   data.status  || 'submitted_to_authority',
             source:   data.source  || 'flutter_mobile_app',
@@ -235,6 +365,7 @@ window.nav = function (page) {
 };
 
 function refreshAll() {
+  reports.forEach(r => { if (r.location?.latitude && r.location?.longitude) queueReverseGeocode(r); });
   renderDash();
   applyFilters();
   renderAnalytics();
@@ -333,8 +464,10 @@ function rowHtml(r, short = false) {
   const pri   = getPriority(r.issueType, typeCounts);
   const count = typeCounts[r.issueType] || 0;
   const loc   = r.location
-    ? `<span style="font-family:var(--mono);font-size:10px">${r.location.latitude.toFixed(4)},${r.location.longitude.toFixed(4)}</span>`
-    : `<span style="color:var(--text3);font-size:11px">No GPS</span>`;
+    ? (r.locationName
+      ? `<span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span>`
+      : `<span style="color:var(--text3);font-size:11px">Location name pending</span>`)
+    : `<span style="color:var(--text3);font-size:11px">No location provided</span>`;
   const imgs  = r.images?.length
     ? `<span style="font-family:var(--mono);font-size:11px;color:var(--teal);font-weight:600">📷 ${r.images.length}</span>`
     : `<span style="color:var(--text3)">—</span>`;
@@ -563,11 +696,13 @@ function updateMapPins(data) {
 
   withLocation.forEach(r => {
     const color  = PIN_COLORS[r.status] || '#E85D24';
+    queueReverseGeocode(r);
     const marker = L.marker([r.location.latitude, r.location.longitude], { icon: makeIcon(color) })
       .addTo(leafletMap)
       .bindPopup(`
         <div style="font-family:sans-serif;min-width:180px">
           <div style="font-weight:700;font-size:13px;margin-bottom:4px">${r.issueType}</div>
+          ${r.locationName ? `<div style="font-size:11px;color:#3a3a3a;margin-bottom:4px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
           <div style="font-size:11px;color:#555;margin-bottom:6px">${r.description.slice(0, 80)}…</div>
           <div style="font-size:10px;color:#888">${r.id} · ${r.status.replace(/_/g, ' ')}</div>
         </div>`, { maxWidth: 220 })
@@ -592,7 +727,9 @@ function renderMapList(data) {
           <div class="map-card-title">${r.issueType}</div>
           <div class="map-card-meta">
             <span>${badge(r.status)}</span>
-            <span style="font-family:var(--mono);font-size:10px">${r.location.latitude.toFixed(4)}, ${r.location.longitude.toFixed(4)}</span>
+            <span style="font-size:10px;color:var(--text2)" title="${r.locationName || ''}">
+              ${r.locationName ? shortenLocationText(r.locationName) : 'Location name pending'}
+            </span>
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">${r.description.slice(0, 60)}…</div>
         </div>`).join('')
@@ -705,8 +842,9 @@ window.openPanel = function (id) {
       ${r.location ? `
         <div class="mini-map">
           <div id="panelMap"></div>
-          <div class="map-coords-chip">${r.location.latitude.toFixed(6)}, ${r.location.longitude.toFixed(6)}</div>
+          <div class="map-coords-chip" title="${r.locationName || ''}">${r.locationName ? shortenLocationText(r.locationName) : "Location name pending"}</div>
         </div>
+        ${r.locationName ? `<div style="font-size:12px;color:var(--text2);margin-top:6px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
         <a href="https://www.openstreetmap.org/?mlat=${r.location.latitude}&mlon=${r.location.longitude}&zoom=17" target="_blank"
            style="font-size:11px;color:var(--teal);text-decoration:none;display:inline-block;margin-top:5px">Open in OpenStreetMap ↗</a>`
       : `<div style="background:var(--bg);border-radius:8px;padding:12px;font-size:12px;color:var(--text3)">
@@ -822,6 +960,7 @@ document.getElementById('globalSearch').addEventListener('input', e => {
         r.issueType?.toLowerCase().includes(q) ||
         r.description?.toLowerCase().includes(q) ||
         r.id?.toLowerCase().includes(q) ||
+        r.locationName?.toLowerCase().includes(q) ||
         r.status?.includes(q) ||
         r.assigned?.toLowerCase().includes(q))
     : null;
@@ -855,11 +994,12 @@ document.getElementById('globalSearch').addEventListener('input', e => {
 
 window.exportCSV = function () {
   const rows = [
-    ['ID', 'Issue Type', 'Description', 'Latitude', 'Longitude', 'Image Count', 'Status', 'Assigned', 'Timestamp'],
+    ['ID', 'Issue Type', 'Description', 'Location Name', 'Latitude', 'Longitude', 'Image Count', 'Status', 'Assigned', 'Timestamp'],
     ...filtered.map(r => [
       r.id,
       `"${r.issueType}"`,
       `"${(r.description || '').replace(/"/g, '""')}"`,
+      `"${(r.locationName || '').replace(/"/g, '""')}"`,
       r.location?.latitude  || '',
       r.location?.longitude || '',
       r.images?.length      || 0,
@@ -901,3 +1041,7 @@ window.toast = function (msg, type = 'info') {
 renderDash();
 applyFilters();
 connectFirebase();
+
+
+
+
