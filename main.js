@@ -396,7 +396,12 @@ function renderDash() {
       <div class="sc-top">
         <div><div class="sc-num">${total}</div><div class="sc-lbl">Total Reports</div></div>
         <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M4 7h10l2 2h4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
+            <path d="M8 7V5a2 2 0 0 1 2-2h4"/>
+            <line x1="7" y1="13" x2="17" y2="13"/>
+            <line x1="7" y1="16" x2="14" y2="16"/>
+          </svg>
         </div>
       </div>
       <div class="sc-note">All time · Flutter app</div>
@@ -405,7 +410,11 @@ function renderDash() {
       <div class="sc-top">
         <div><div class="sc-num" style="color:var(--amber)">${offline}</div><div class="sc-lbl">Saved Offline</div></div>
         <div class="sc-icon" style="background:var(--amber-lt);color:var(--amber)">
-          <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/>
+            <path d="M6 17a3 3 0 0 1 3-3"/>
+            <line x1="3" y1="3" x2="21" y2="21"/>
+          </svg>
         </div>
       </div>
       <div class="sc-note">${offline > 0 ? 'Pending upload from device' : 'All synced'}</div>
@@ -414,7 +423,12 @@ function renderDash() {
       <div class="sc-top">
         <div><div class="sc-num" style="color:var(--blue)">${active}</div><div class="sc-lbl">Active Cases</div></div>
         <div class="sc-icon" style="background:var(--blue-lt);color:var(--blue)">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M3 18h18"/>
+            <path d="M6 18l4-8h4l4 8"/>
+            <line x1="10" y1="10" x2="14" y2="10"/>
+            <circle cx="12" cy="6" r="2"/>
+          </svg>
         </div>
       </div>
       <div class="sc-note">Submitted + in progress</div>
@@ -423,7 +437,10 @@ function renderDash() {
       <div class="sc-top">
         <div><div class="sc-num" style="color:var(--green)">${resolved}</div><div class="sc-lbl">Resolved</div></div>
         <div class="sc-icon" style="background:var(--green-lt);color:var(--green)">
-          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/>
+            <polyline points="8.5 12.5 11 15 16 9"/>
+          </svg>
         </div>
       </div>
       <div class="sc-note">Completed &amp; closed</div>
@@ -608,8 +625,8 @@ function renderStatusChart(elId) {
 
   document.getElementById(elId).innerHTML = STATUS_FLOW.map(s => `
     <div class="st-row">
-      <div class="st-dot" style="background:${colors[s]}"></div>
-      <div class="st-lbl">${s.replace(/_/g, ' ')}</div>
+      <div class="st-dot"></div>
+      <div class="st-lbl" style="color:${colors[s]}">${s.replace(/_/g, ' ')}</div>
       <div class="st-val">${sc[s] || 0}</div>
       <div class="st-pct">${Math.round(((sc[s] || 0) / total) * 100)}%</div>
     </div>`).join('');
