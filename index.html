@@ -88,8 +88,18 @@
           </div>
         </div>
 
-        <!-- Stat cards -->
-        <div class="stats-row" id="statsRow"></div>
+        <!-- Dash Top Container -->
+        <div class="dash-top-container">
+          <div class="stats-grid" id="statsRow"></div>
+          <div class="pie-wrapper card stat-glass" style="padding:18px;">
+            <div class="card-title" style="margin-bottom:14px; text-align: center;">Status Overview</div>
+            <div class="pie-container">
+              <div id="dynamicPie" class="dynamic-pie"></div>
+              <div class="pie-arrows"></div>
+            </div>
+            <div id="pieLegend" class="pie-legend"></div>
+          </div>
+        </div>
 
         <!-- Recent reports table -->
         <div class="card">
@@ -105,8 +115,8 @@
           </table>
         </div>
 
-        <!-- Bottom 3-column cards -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+        <!-- Bottom 2-column cards -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
           <div class="card stat-glass" style="padding:18px">
             <div class="card-title" style="margin-bottom:4px">Priority Hotspots</div>
             <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Active reports grouped by issue type</div>
@@ -115,10 +125,6 @@
           <div class="card stat-glass" style="padding:18px">
             <div class="card-title" style="margin-bottom:14px">Reports by Issue Type</div>
             <div id="typeChartDash"></div>
-          </div>
-          <div class="card stat-glass" style="padding:18px">
-            <div class="card-title" style="margin-bottom:14px">Status Breakdown</div>
-            <div id="statusChartDash"></div>
           </div>
         </div>
       </div>
@@ -143,11 +149,11 @@
           </select>
           <select class="fsel" style="flex:1;font-size:11px" id="mapFStatus" onchange="applyMapFilter()">
             <option value="">All Status</option>
-            <option value="saved_offline">Offline</option>
-            <option value="submitted_to_authority">Submitted</option>
+            <option value="submitted">Submitted</option>
             <option value="acknowledged">Acknowledged</option>
             <option value="in_progress">In Progress</option>
             <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
           </select>
         </div>
         <div class="map-list" id="mapList"></div>
@@ -178,8 +184,7 @@
         <div class="filter-bar">
           <select class="fsel" id="fStatus" onchange="applyFilters()">
             <option value="">All Status</option>
-            <option value="saved_offline">Saved Offline</option>
-            <option value="submitted_to_authority">Submitted</option>
+            <option value="submitted">Submitted</option>
             <option value="acknowledged">Acknowledged</option>
             <option value="in_progress">In Progress</option>
             <option value="resolved">Resolved</option>

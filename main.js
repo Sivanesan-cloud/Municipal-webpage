@@ -34,8 +34,7 @@ const ROUTING = {
 };
 
 const STATUS_FLOW = [
-  'saved_offline',
-  'submitted_to_authority',
+  'submitted',
   'acknowledged',
   'in_progress',
   'resolved',
@@ -43,10 +42,9 @@ const STATUS_FLOW = [
 ];
 
 const PIN_COLORS = {
-  saved_offline:           '#B87A10',
-  submitted_to_authority:  '#E85D24',
+  submitted:               '#E85D24',
   acknowledged:            '#1E6B6E',
-  in_progress:             '#1E6B6E',
+  in_progress:             '#B87A10',
   resolved:                '#1A6235',
   closed:                  '#8A9DAD',
 };
@@ -318,7 +316,7 @@ async function connectFirebase() {
               : null,
             locationName,
             images:   normalizeImages(data),
-            status:   data.status  || 'submitted_to_authority',
+            status:   ['saved_offline', 'submitted_to_authority'].includes(data.status) ? 'submitted' : (data.status || 'submitted'),
             source:   data.source  || 'flutter_mobile_app',
             assigned: data.assigned || ROUTING[data.issueType] || 'Unassigned',
           };
@@ -382,69 +380,68 @@ function refreshAll() {
 //  DASHBOARD
 // ══════════════════════════════
 
+function animateDashValue(id, start, end, duration) {
+  let obj = document.getElementById(id);
+  if (!obj) return;
+  let startTimestamp = null;
+  const step = (timestamp) => {
+    if (!startTimestamp) startTimestamp = timestamp;
+    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+    obj.innerHTML = Math.floor(progress * (end - start) + start);
+    if (progress < 1) {
+      window.requestAnimationFrame(step);
+    } else {
+      obj.innerHTML = end;
+    }
+  };
+  window.requestAnimationFrame(step);
+}
+
 function renderDash() {
   document.getElementById('dashDate').textContent =
     new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  const total    = reports.length;
-  const offline  = reports.filter(r => r.status === 'saved_offline').length;
-  const active   = reports.filter(r => ['submitted_to_authority', 'acknowledged', 'in_progress'].includes(r.status)).length;
-  const resolved = reports.filter(r => ['resolved', 'closed'].includes(r.status)).length;
+  const activeCount   = reports.filter(r => ['submitted', 'in_progress'].includes(r.status)).length;
+  const ackCount      = reports.filter(r => r.status === 'acknowledged').length;
+  const pendingCount  = reports.filter(r => ['submitted', 'acknowledged', 'in_progress'].includes(r.status)).length;
+  const resolvedCount = reports.filter(r => ['resolved', 'closed'].includes(r.status)).length;
 
   document.getElementById('statsRow').innerHTML = `
     <div class="scard">
       <div class="sc-top">
-        <div><div class="sc-num">${total}</div><div class="sc-lbl">Total Reports</div></div>
-        <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)">
-          <svg viewBox="0 0 24 24">
-            <path d="M4 7h10l2 2h4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
-            <path d="M8 7V5a2 2 0 0 1 2-2h4"/>
-            <line x1="7" y1="13" x2="17" y2="13"/>
-            <line x1="7" y1="16" x2="14" y2="16"/>
-          </svg>
-        </div>
+        <div><div class="sc-num" id="dash-active">0</div><div class="sc-lbl">Active Cases</div></div>
+        <div class="sc-icon" style="background:var(--blue-lt);color:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 7h10l2 2h4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/></svg></div>
       </div>
-      <div class="sc-note">All time · Flutter app</div>
+      <div class="sc-note">Submitted &amp; In Progress</div>
     </div>
     <div class="scard">
       <div class="sc-top">
-        <div><div class="sc-num" style="color:var(--amber)">${offline}</div><div class="sc-lbl">Saved Offline</div></div>
-        <div class="sc-icon" style="background:var(--amber-lt);color:var(--amber)">
-          <svg viewBox="0 0 24 24">
-            <path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/>
-            <path d="M6 17a3 3 0 0 1 3-3"/>
-            <line x1="3" y1="3" x2="21" y2="21"/>
-          </svg>
-        </div>
+        <div><div class="sc-num" id="dash-ack" style="color:var(--teal)">0</div><div class="sc-lbl">Acknowledged</div></div>
+        <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)"><svg viewBox="0 0 24 24"><path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/></svg></div>
       </div>
-      <div class="sc-note">${offline > 0 ? 'Pending upload from device' : 'All synced'}</div>
+      <div class="sc-note">Checked by Authority</div>
     </div>
     <div class="scard">
       <div class="sc-top">
-        <div><div class="sc-num" style="color:var(--blue)">${active}</div><div class="sc-lbl">Active Cases</div></div>
-        <div class="sc-icon" style="background:var(--blue-lt);color:var(--blue)">
-          <svg viewBox="0 0 24 24">
-            <path d="M3 18h18"/>
-            <path d="M6 18l4-8h4l4 8"/>
-            <line x1="10" y1="10" x2="14" y2="10"/>
-            <circle cx="12" cy="6" r="2"/>
-          </svg>
-        </div>
+        <div><div class="sc-num" id="dash-pending" style="color:var(--amber)">0</div><div class="sc-lbl">Pending Reports</div></div>
+        <div class="sc-icon" style="background:var(--amber-lt);color:var(--amber)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
       </div>
-      <div class="sc-note">Submitted + in progress</div>
+      <div class="sc-note">In workflow pipeline</div>
     </div>
     <div class="scard">
       <div class="sc-top">
-        <div><div class="sc-num" style="color:var(--green)">${resolved}</div><div class="sc-lbl">Resolved</div></div>
-        <div class="sc-icon" style="background:var(--green-lt);color:var(--green)">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/>
-            <polyline points="8.5 12.5 11 15 16 9"/>
-          </svg>
-        </div>
+        <div><div class="sc-num" id="dash-resolved" style="color:var(--green)">0</div><div class="sc-lbl">Resolved</div></div>
+        <div class="sc-icon" style="background:var(--green-lt);color:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/><polyline points="8.5 12.5 11 15 16 9"/></svg></div>
       </div>
-      <div class="sc-note">Completed &amp; closed</div>
+      <div class="sc-note">Completed &amp; Closed</div>
     </div>`;
+
+  requestAnimationFrame(() => {
+    animateDashValue('dash-active', 0, activeCount, 800);
+    animateDashValue('dash-ack', 0, ackCount, 800);
+    animateDashValue('dash-pending', 0, pendingCount, 800);
+    animateDashValue('dash-resolved', 0, resolvedCount, 800);
+  });
 
   document.getElementById('dashBody').innerHTML = reports.length
     ? reports.slice(0, 6).map(r => rowHtml(r, true)).join('')
@@ -468,7 +465,7 @@ function renderDash() {
     : `<div style="color:var(--text3);font-size:12px;padding:8px 0">No active reports</div>`;
 
   renderTypeChart('typeChartDash');
-  renderStatusChart('statusChartDash');
+  renderPieChart();
 }
 
 
@@ -518,8 +515,7 @@ function rowHtml(r, short = false) {
 
 function badge(s) {
   const m = {
-    saved_offline:          'b-offline',
-    submitted_to_authority: 'b-submitted',
+    submitted:              'b-submitted',
     acknowledged:           'b-acknowledged',
     in_progress:            'b-inprog',
     resolved:               'b-resolved',
@@ -609,23 +605,61 @@ function renderTypeChart(elId) {
     .join('');
 }
 
+function renderPieChart() {
+  const sc = {};
+  STATUS_FLOW.forEach(s => (sc[s] = 0));
+  reports.forEach(r => { if(sc[r.status]!==undefined) sc[r.status]++ });
+  const total = reports.length || 1;
+  const colors = {
+    submitted:    '#E85D24',
+    acknowledged: '#1E6B6E',
+    in_progress:  '#B87A10',
+    resolved:     '#1A6235',
+    closed:       '#8A9DAD',
+  };
+
+  let stops = [];
+  let currentPct = 0;
+  STATUS_FLOW.forEach(s => {
+    let pct = (sc[s] || 0) / total * 100;
+    if (pct > 0) {
+      stops.push(`${colors[s]} ${currentPct}% ${currentPct + pct}%`);
+      currentPct += pct;
+    }
+  });
+
+  const pieEl = document.getElementById('dynamicPie');
+  if (pieEl) {
+    pieEl.style.background = stops.length ? `conic-gradient(${stops.join(', ')})` : 'conic-gradient(var(--border) 0% 100%)';
+  }
+
+  const legendEl = document.getElementById('pieLegend');
+  if (legendEl) {
+    legendEl.innerHTML = STATUS_FLOW.map(s => `
+      <div class="pie-legend-item">
+        <div class="pie-legend-color" style="background:${colors[s]}"></div>
+        <span>${s.replace(/_/g, ' ')} (${Math.round((sc[s]||0)/total*100)}%)</span>
+      </div>
+    `).join('');
+  }
+}
+
 function renderStatusChart(elId) {
   const sc = {};
   STATUS_FLOW.forEach(s => (sc[s] = 0));
-  reports.forEach(r => { sc[r.status] = (sc[r.status] || 0) + 1; });
+  reports.forEach(r => { if(sc[r.status]!==undefined) sc[r.status]++ });
   const total  = reports.length || 1;
   const colors = {
-    saved_offline:          '#B87A10',
-    submitted_to_authority: '#1A4E8C',
-    acknowledged:           '#1E6B6E',
-    in_progress:            '#9A5008',
-    resolved:               '#1A6235',
-    closed:                 '#8A9DAD',
+    submitted:    '#E85D24',
+    acknowledged: '#1E6B6E',
+    in_progress:  '#B87A10',
+    resolved:     '#1A6235',
+    closed:       '#8A9DAD',
   };
 
   document.getElementById(elId).innerHTML = STATUS_FLOW.map(s => `
     <div class="st-row">
-      <div class="st-dot"></div>
+      <div class="st-dot" style="background:${colors[s]}"></div>
       <div class="st-lbl" style="color:${colors[s]}">${s.replace(/_/g, ' ')}</div>
       <div class="st-val">${sc[s] || 0}</div>
       <div class="st-pct">${Math.round(((sc[s] || 0) / total) * 100)}%</div>
@@ -639,14 +673,14 @@ function renderStatusChart(elId) {
 
 function renderAnalytics() {
   const total    = reports.length;
-  const offline  = reports.filter(r => r.status === 'saved_offline').length;
-  const active   = reports.filter(r => ['submitted_to_authority', 'acknowledged', 'in_progress'].includes(r.status)).length;
+  const active   = reports.filter(r => ['submitted', 'in_progress'].includes(r.status)).length;
+  const ack      = reports.filter(r => r.status === 'acknowledged').length;
   const resolved = reports.filter(r => ['resolved', 'closed'].includes(r.status)).length;
 
   document.getElementById('aStatsRow').innerHTML = `
     <div class="scard"><div class="sc-num">${total}</div><div class="sc-lbl">Total</div></div>
-    <div class="scard"><div class="sc-num" style="color:var(--amber)">${offline}</div><div class="sc-lbl">Offline Pending</div></div>
-    <div class="scard"><div class="sc-num" style="color:var(--blue)">${active}</div><div class="sc-lbl">Active</div></div>
+    <div class="scard"><div class="sc-num" style="color:var(--amber)">${active}</div><div class="sc-lbl">Active</div></div>
+    <div class="scard"><div class="sc-num" style="color:var(--blue)">${ack}</div><div class="sc-lbl">Acknowledged</div></div>
     <div class="scard"><div class="sc-num" style="color:var(--green)">${resolved}</div><div class="sc-lbl">Resolved</div></div>`;
 
   renderTypeChart('typeChartA');
