@@ -91,13 +91,22 @@
         <!-- Dash Top Container -->
         <div class="dash-top-container">
           <div class="stats-grid" id="statsRow"></div>
-          <div class="pie-wrapper card stat-glass" style="padding:18px;">
-            <div class="card-title" style="margin-bottom:14px; text-align: center;">Status Overview</div>
-            <div class="pie-container">
-              <div id="dynamicPie" class="dynamic-pie"></div>
-              <div class="pie-arrows"></div>
+          <div class="sd-card">
+            <div class="sd-title">Status Overview</div>
+
+            <div class="sd-chart-wrapper">
+              <div class="sd-donut-container">
+                <div class="sd-donut"></div>
+              </div>
             </div>
-            <div id="pieLegend" class="pie-legend"></div>
+
+            <div class="sd-legend">
+              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#E85D24"></div><span>submitted (20%)</span></div>
+              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#F29E02"></div><span>acknowledged (20%)</span></div>
+              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#22C55E"></div><span>in progress (20%)</span></div>
+              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#6B7280"></div><span>resolved (0%)</span></div>
+              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#5E62FA"></div><span>closed (0%)</span></div>
+            </div>
           </div>
         </div>
 
