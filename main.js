@@ -37,14 +37,21 @@ const STATUS_FLOW = [
   'submitted',
   'acknowledged',
   'in_progress',
+  'completed',
+  'verified',
   'resolved',
   'closed',
 ];
+
+// Proof of Execution statuses
+const POE_STATUSES = ['completed', 'verified'];
 
 const PIN_COLORS = {
   submitted:               '#E85D24',
   acknowledged:            '#1E6B6E',
   in_progress:             '#B87A10',
+  completed:               '#5E62FA',
+  verified:                '#1A6235',
   resolved:                '#1A6235',
   closed:                  '#8A9DAD',
 };
@@ -96,6 +103,36 @@ function priHTML(level, count) {
     <span class="pri-dot"></span>${icons[level]} ${labels[level]}
     <span style="font-size:10px;font-weight:400;opacity:0.75;margin-left:2px">×${count}</span>
   </span>`;
+}
+
+function priorityReasonBarHtml(count) {
+  const cap = Math.max(PRI_THRESHOLDS.critical + 2, count, 6);
+  const pMedium = (PRI_THRESHOLDS.medium / cap) * 100;
+  const pHigh = (PRI_THRESHOLDS.high / cap) * 100;
+  const pCritical = (PRI_THRESHOLDS.critical / cap) * 100;
+  const pCount = (Math.min(count, cap) / cap) * 100;
+  const gradient = `linear-gradient(90deg,
+    #BFECCB 0% ${pMedium}%,
+    #FBE6A1 ${pMedium}% ${pHigh}%,
+    #F9C48E ${pHigh}% ${pCritical}%,
+    #F3A5A5 ${pCritical}% 100%)`;
+
+  return `
+    <div class="pri-bar">
+      <div class="pri-bar-fill" style="background:${gradient}"></div>
+      <div class="pri-bar-marker" style="left:${pCount}%"><span>${count}</span></div>
+      <div class="pri-bar-tick" style="left:${pMedium}%"></div>
+      <div class="pri-bar-tick" style="left:${pHigh}%"></div>
+      <div class="pri-bar-tick" style="left:${pCritical}%"></div>
+    </div>
+    <div class="pri-bar-scale">
+      <div class="pri-bar-label" style="left:0%">Low</div>
+      <div class="pri-bar-label" style="left:${pMedium}%">Medium</div>
+      <div class="pri-bar-label" style="left:${pHigh}%">High</div>
+      <div class="pri-bar-label" style="left:${pCritical}%">Critical</div>
+    </div>
+    <div class="pri-bar-note">Thresholds: Medium ≥${PRI_THRESHOLDS.medium}, High ≥${PRI_THRESHOLDS.high}, Critical ≥${PRI_THRESHOLDS.critical}</div>
+  `;
 }
 
 
@@ -316,9 +353,18 @@ async function connectFirebase() {
               : null,
             locationName,
             images:   normalizeImages(data),
-            status:   ['saved_offline', 'submitted_to_authority'].includes(data.status) ? 'submitted' : (data.status || 'submitted'),
-            source:   data.source  || 'flutter_mobile_app',
-            assigned: data.assigned || ROUTING[data.issueType] || 'Unassigned',
+            status:          ['saved_offline', 'submitted_to_authority'].includes(data.status) ? 'submitted' : (data.status || 'submitted'),
+            source:          data.source  || 'flutter_mobile_app',
+            assigned:        data.assigned || ROUTING[data.issueType] || 'Unassigned',
+            // Proof of Execution fields
+            proofImageUrl:   data.proofImageUrl   || null,
+            proofNote:       data.proofNote       || '',
+            proofUploadedAt: data.proofUploadedAt || null,
+            adminVerified:   data.adminVerified   || null,   // true=approved, false=rejected
+            adminNote:       data.adminNote       || '',
+            rating:          data.rating          || null,   // 1-5
+            ratingComment:   data.ratingComment   || '',
+            ratingAt:        data.ratingAt        || null,
           };
         });
         reports  = live;
@@ -465,7 +511,7 @@ function renderDash() {
     : `<div style="color:var(--text3);font-size:12px;padding:8px 0">No active reports</div>`;
 
   renderTypeChart('typeChartDash');
-  renderPieChart();
+  renderStatusOverview();
 }
 
 
@@ -518,6 +564,8 @@ function badge(s) {
     submitted:              'b-submitted',
     acknowledged:           'b-acknowledged',
     in_progress:            'b-inprog',
+    completed:              'b-completed',
+    verified:               'b-verified',
     resolved:               'b-resolved',
     closed:                 'b-closed',
   };
@@ -605,43 +653,67 @@ function renderTypeChart(elId) {
     .join('');
 }
 
-function renderPieChart() {
-  const sc = {};
-  STATUS_FLOW.forEach(s => (sc[s] = 0));
-  reports.forEach(r => { if(sc[r.status]!==undefined) sc[r.status]++ });
-  const total = reports.length || 1;
-  const colors = {
-    submitted:    '#E85D24',
-    acknowledged: '#1E6B6E',
-    in_progress:  '#B87A10',
-    resolved:     '#1A6235',
-    closed:       '#8A9DAD',
-  };
+function renderStatusOverview() {
+  const donutEl = document.getElementById('sdDonut');
+  const legendEl = document.getElementById('sdLegend');
+  if (!donutEl || !legendEl) return;
+
+  const buckets = [
+    {
+      key: 'submitted',
+      label: 'submitted',
+      color: '#E85D24',
+      match: r => r.status === 'submitted',
+    },
+    {
+      key: 'acknowledged',
+      label: 'acknowledged',
+      color: '#F29E02',
+      match: r => r.status === 'acknowledged',
+    },
+    {
+      key: 'in_progress',
+      label: 'in progress',
+      color: '#22C55E',
+      match: r => ['in_progress', 'completed', 'verified'].includes(r.status),
+    },
+    {
+      key: 'resolved',
+      label: 'resolved',
+      color: '#6B7280',
+      match: r => r.status === 'resolved',
+    },
+    {
+      key: 'closed',
+      label: 'closed',
+      color: '#5E62FA',
+      match: r => r.status === 'closed',
+    },
+  ];
+
+  const total = reports.length;
+  const denom = total || 1;
+  const data = buckets.map(b => ({ ...b, count: reports.filter(b.match).length }));
 
   let stops = [];
   let currentPct = 0;
-  STATUS_FLOW.forEach(s => {
-    let pct = (sc[s] || 0) / total * 100;
+  data.forEach(b => {
+    const pct = (b.count / denom) * 100;
     if (pct > 0) {
-      stops.push(`${colors[s]} ${currentPct}% ${currentPct + pct}%`);
+      stops.push(`${b.color} ${currentPct}% ${currentPct + pct}%`);
       currentPct += pct;
     }
   });
 
-  const pieEl = document.getElementById('dynamicPie');
-  if (pieEl) {
-    pieEl.style.background = stops.length ? `conic-gradient(${stops.join(', ')})` : 'conic-gradient(var(--border) 0% 100%)';
-  }
+  donutEl.style.background = stops.length
+    ? `conic-gradient(${stops.join(', ')})`
+    : 'conic-gradient(var(--border) 0% 100%)';
 
-  const legendEl = document.getElementById('pieLegend');
-  if (legendEl) {
-    legendEl.innerHTML = STATUS_FLOW.map(s => `
-      <div class="pie-legend-item">
-        <div class="pie-legend-color" style="background:${colors[s]}"></div>
-        <span>${s.replace(/_/g, ' ')} (${Math.round((sc[s]||0)/total*100)}%)</span>
-      </div>
-    `).join('');
-  }
+  legendEl.innerHTML = data.map(b => `
+    <div class="sd-leg-item">
+      <div class="sd-leg-dot" style="background:${b.color}"></div>
+      <span>${b.label} (${Math.round((b.count / denom) * 100)}%)</span>
+    </div>`).join('');
 }
 
 function renderStatusChart(elId) {
@@ -863,6 +935,7 @@ window.openPanel = function (id) {
           <span style="font-style:italic;color:var(--text3)">"${r.issueType}"</span>
           — priority is ${pri.toUpperCase()}.
         </div>
+        ${priorityReasonBarHtml(priCt)}
         ${related.length ? `
           <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px">Other same-type reports</div>
           ${related.slice(0, 4).map(x => `
@@ -1092,6 +1165,1240 @@ window.toast = function (msg, type = 'info') {
 renderDash();
 applyFilters();
 connectFirebase();
+
+
+
+// ══════════════════════════════════════════════════════
+//  WORKER ASSIGNMENT SYSTEM
+//  All worker data lives in localStorage for persistence.
+//  Assignments are also pushed to Firestore via pushUpdate.
+// ══════════════════════════════════════════════════════
+
+const WORKER_STORAGE_KEY = 'civicdesk_workers_v2';
+
+const DEPT_META = {
+  'Electrical Dept': { cls: 'dept-electrical', icon: '⚡', color: '#9A5008' },
+  'Roads & Infra':   { cls: 'dept-roads',      icon: '🛣️', color: '#1A4E8C' },
+  'Water Supply':    { cls: 'dept-water',       icon: '💧', color: '#1E6B6E' },
+  'Sanitation':      { cls: 'dept-sanitation',  icon: '🗑️', color: '#1A6235' },
+  'Parks & Env.':    { cls: 'dept-parks',       icon: '🌿', color: '#156734' },
+  'General Admin':   { cls: 'dept-admin',       icon: '🏛️', color: '#8A9DAD' },
+};
+
+const AV_COLORS = ['#1E6B6E','#1A4E8C','#B87A10','#1A6235','#8A4A2A','#5E62FA','#E85D24','#4A9E9F','#8B3A00','#156734'];
+
+const SEED_WORKERS = [
+  { id:'W001', name:'Arjun Ramesh',    department:'Electrical Dept', experience:8,  activeTasks:2, phone:'+91 98765 10001' },
+  { id:'W002', name:'Priya Nair',      department:'Electrical Dept', experience:5,  activeTasks:4, phone:'+91 98765 10002' },
+  { id:'W003', name:'Suresh Babu',     department:'Roads & Infra',   experience:12, activeTasks:1, phone:'+91 98765 10003' },
+  { id:'W004', name:'Kavitha Menon',   department:'Roads & Infra',   experience:7,  activeTasks:5, phone:'+91 98765 10004' },
+  { id:'W005', name:'Rajan Pillai',    department:'Water Supply',    experience:10, activeTasks:3, phone:'+91 98765 10005' },
+  { id:'W006', name:'Meena Krishnan',  department:'Water Supply',    experience:4,  activeTasks:6, phone:'+91 98765 10006' },
+  { id:'W007', name:'Dinesh Kumar',    department:'Sanitation',      experience:6,  activeTasks:2, phone:'+91 98765 10007' },
+  { id:'W008', name:'Lakshmi Devi',    department:'Sanitation',      experience:9,  activeTasks:0, phone:'+91 98765 10008' },
+  { id:'W009', name:'Venkat Rao',      department:'Sanitation',      experience:3,  activeTasks:7, phone:'+91 98765 10009' },
+  { id:'W010', name:'Anitha Selvi',    department:'Parks & Env.',    experience:5,  activeTasks:1, phone:'+91 98765 10010' },
+  { id:'W011', name:'Murugan Swamy',   department:'Parks & Env.',    experience:11, activeTasks:3, phone:'+91 98765 10011' },
+  { id:'W012', name:'Thenmozhi R.',    department:'General Admin',   experience:7,  activeTasks:2, phone:'+91 98765 10012' },
+  { id:'W013', name:'Balu Pandian',    department:'Roads & Infra',   experience:2,  activeTasks:0, phone:'+91 98765 10013' },
+  { id:'W014', name:'Saranya Mohan',   department:'Electrical Dept', experience:6,  activeTasks:3, phone:'+91 98765 10014' },
+  { id:'W015', name:'Gopal Krishnan',  department:'Water Supply',    experience:14, activeTasks:1, phone:'+91 98765 10015' },
+];
+
+// ─── Load / seed workers ───────────────────────────────
+
+function loadWorkers() {
+  try {
+    const raw = localStorage.getItem(WORKER_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  saveWorkers(SEED_WORKERS);
+  return SEED_WORKERS.map(w => ({ ...w }));
+}
+
+function saveWorkers(ws) {
+  try { localStorage.setItem(WORKER_STORAGE_KEY, JSON.stringify(ws)); } catch (_) {}
+}
+
+let workers = loadWorkers();
+
+// ─── Helpers ──────────────────────────────────────────
+
+function workerInitials(name) {
+  return name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+
+function workerAvColor(id) {
+  const idx = parseInt(id.replace(/\D/g, ''), 10) || 0;
+  return AV_COLORS[idx % AV_COLORS.length];
+}
+
+function deptClass(dept) {
+  return DEPT_META[dept]?.cls || 'dept-admin';
+}
+
+function deptIcon(dept) {
+  return DEPT_META[dept]?.icon || '🏛️';
+}
+
+function workloadClass(n) {
+  if (n <= 2) return 'wl-low';
+  if (n <= 5) return 'wl-med';
+  return 'wl-high';
+}
+
+function workloadLabel(n) {
+  if (n <= 2) return '<span class="worker-status-badge ws-available">● Available</span>';
+  if (n <= 5) return '<span class="worker-status-badge ws-busy">● Busy</span>';
+  return '<span class="worker-status-badge ws-overloaded">● Overloaded</span>';
+}
+
+function expStars(n) {
+  const yrs = Math.min(Math.round(n / 3), 5);
+  return '★'.repeat(yrs) + '☆'.repeat(5 - yrs) + `<span style="font-size:10px;color:var(--text3);margin-left:4px">${n}yr</span>`;
+}
+
+function workloadBarHtml(n) {
+  const cls = workloadClass(n);
+  const pct = Math.min((n / 10) * 100, 100);
+  return `
+    <div class="wl-bar-wrap ${cls}">
+      <div class="wl-bar-track"><div class="wl-bar-fill" style="width:${pct}%"></div></div>
+      <div class="wl-count">${n}</div>
+    </div>`;
+}
+
+// ─── Smart Assignment Suggestion ──────────────────────
+
+/**
+ * Returns suggested worker for an issue.
+ * - HIGH/CRITICAL priority: score by (experience × 2) − (activeTasks × 3), prefer dept match
+ * - Otherwise: lowest activeTasks in matching dept first, then globally
+ */
+function getWorkerSuggestion(issue) {
+  if (!workers.length) return null;
+  const dept = ROUTING[issue.issueType] || '';
+  const typeCounts = computePriorities(reports);
+  const pri = getPriority(issue.issueType, typeCounts);
+  const isHighPri = ['critical', 'high'].includes(pri);
+
+  let pool = [...workers];
+
+  if (isHighPri) {
+    // Score: experience weight − workload penalty
+    pool.sort((a, b) => {
+      const scoreA = (a.experience * 2) - (a.activeTasks * 3) + (a.department === dept ? 5 : 0);
+      const scoreB = (b.experience * 2) - (b.activeTasks * 3) + (b.department === dept ? 5 : 0);
+      return scoreB - scoreA;
+    });
+  } else {
+    // Prefer dept match + lowest workload
+    const deptMatch = pool.filter(w => w.department === dept);
+    const sorted = (deptMatch.length ? deptMatch : pool).sort((a, b) => a.activeTasks - b.activeTasks);
+    return sorted[0] || null;
+  }
+
+  return pool[0] || null;
+}
+
+// ─── Assign worker to issue ───────────────────────────
+
+window.assignWorkerToIssue = async function (issueId, workerId, fromPanel = false) {
+  const issue  = reports.find(r => r.id === issueId);
+  const worker = workers.find(w => w.id === workerId);
+  if (!issue || !worker) return;
+
+  // Decrement previous worker if already had one
+  if (issue.assignedWorkerId && issue.assignedWorkerId !== workerId) {
+    const prev = workers.find(w => w.id === issue.assignedWorkerId);
+    if (prev && prev.activeTasks > 0) prev.activeTasks--;
+  }
+
+  // Assign
+  issue.assignedWorkerId   = workerId;
+  issue.assignedWorkerName = worker.name;
+  issue.assigned           = worker.department;
+  if (issue.status === 'submitted') issue.status = 'acknowledged';
+
+  // Increment new worker unless already assigned
+  if (issue.assignedWorkerId === workerId) worker.activeTasks++;
+
+  saveWorkers(workers);
+  await pushUpdate(issueId, issue.status, `${worker.name} (${worker.department})`, `Assigned to ${worker.name}`);
+
+  refreshAll();
+  renderWorkersPage();
+  updateWorkerAlertBadge();
+  toast(`Issue ${issueId} assigned to ${worker.name}`, 'ok');
+
+  if (fromPanel) {
+    // Re-open panel to refresh assignment section
+    setTimeout(() => openPanel(issueId), 100);
+  }
+};
+
+window.unassignWorkerFromIssue = async function (issueId) {
+  const issue = reports.find(r => r.id === issueId);
+  if (!issue) return;
+
+  if (issue.assignedWorkerId) {
+    const prev = workers.find(w => w.id === issue.assignedWorkerId);
+    if (prev && prev.activeTasks > 0) prev.activeTasks--;
+  }
+
+  issue.assignedWorkerId   = null;
+  issue.assignedWorkerName = null;
+  issue.assigned           = ROUTING[issue.issueType] || 'Unassigned';
+
+  saveWorkers(workers);
+  await pushUpdate(issueId, issue.status, issue.assigned, 'Worker unassigned');
+
+  refreshAll();
+  renderWorkersPage();
+  updateWorkerAlertBadge();
+  toast(`Worker unassigned from ${issueId}`, 'info');
+  setTimeout(() => openPanel(issueId), 100);
+};
+
+// Call this whenever a status changes to resolved/closed to auto-decrement workload
+function onIssueStatusChanged(issue, newStatus) {
+  if (['resolved', 'closed'].includes(newStatus) && issue.assignedWorkerId) {
+    const worker = workers.find(w => w.id === issue.assignedWorkerId);
+    if (worker && worker.activeTasks > 0) {
+      worker.activeTasks--;
+      saveWorkers(workers);
+      renderWorkersPage();
+      updateWorkerAlertBadge();
+    }
+  }
+}
+
+// ─── Update alert badge ───────────────────────────────
+
+function updateWorkerAlertBadge() {
+  const overloaded = workers.filter(w => w.activeTasks >= 6).length;
+  const el = document.getElementById('workerAlertCount');
+  if (!el) return;
+  el.textContent = overloaded;
+  el.classList.toggle('show', overloaded > 0);
+}
+
+// ─── Workers Page Renderer ────────────────────────────
+
+window.renderWorkersPage = function () {
+  renderWorkerStats();
+  renderWorkerTable();
+  renderUnassignedList();
+  updateWorkerAlertBadge();
+};
+
+function renderWorkerStats() {
+  const el = document.getElementById('workerStatsRow');
+  if (!el) return;
+
+  const total    = workers.length;
+  const avgLoad  = workers.length ? (workers.reduce((s, w) => s + w.activeTasks, 0) / workers.length).toFixed(1) : 0;
+  const overload = workers.filter(w => w.activeTasks >= 6).length;
+
+  // Most loaded dept
+  const deptLoad = {};
+  workers.forEach(w => { deptLoad[w.department] = (deptLoad[w.department] || 0) + w.activeTasks; });
+  const topDept = Object.entries(deptLoad).sort((a, b) => b[1] - a[1])[0];
+
+  el.innerHTML = `
+    <div class="scard">
+      <div class="sc-top">
+        <div><div class="sc-num" style="color:var(--teal)">${total}</div><div class="sc-lbl">Total Workers</div></div>
+        <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+      </div>
+      <div class="sc-note">Across all departments</div>
+    </div>
+    <div class="scard">
+      <div class="sc-top">
+        <div><div class="sc-num" style="color:var(--amber)">${avgLoad}</div><div class="sc-lbl">Avg Workload</div></div>
+        <div class="sc-icon" style="background:var(--amber-lt);color:var(--amber)">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+      </div>
+      <div class="sc-note">Active tasks per worker</div>
+    </div>
+    <div class="scard">
+      <div class="sc-top">
+        <div><div class="sc-num" style="color:var(--red)">${overload}</div><div class="sc-lbl">Overloaded</div></div>
+        <div class="sc-icon" style="background:var(--red-lt);color:var(--red)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+      </div>
+      <div class="sc-note">Workers with 6+ tasks</div>
+    </div>
+    <div class="scard">
+      <div class="sc-top">
+        <div>
+          <div class="sc-num" style="font-size:14px;color:var(--blue)">${topDept ? topDept[0].split(' ')[0] : '—'}</div>
+          <div class="sc-lbl">Busiest Dept</div>
+        </div>
+        <div class="sc-icon" style="background:var(--blue-lt);color:var(--blue)">
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+      </div>
+      <div class="sc-note">${topDept ? topDept[1] + ' total tasks' : 'No data'}</div>
+    </div>`;
+}
+
+function renderWorkerTable() {
+  const tbody    = document.getElementById('workersTbody');
+  const countEl  = document.getElementById('workerCount');
+  if (!tbody) return;
+
+  const dept     = document.getElementById('wfDept')?.value     || '';
+  const wl       = document.getElementById('wfWorkload')?.value || '';
+  const search   = (document.getElementById('wfSearch')?.value  || '').toLowerCase();
+
+  let list = [...workers];
+  if (dept)   list = list.filter(w => w.department === dept);
+  if (wl === 'low')    list = list.filter(w => w.activeTasks <= 2);
+  if (wl === 'medium') list = list.filter(w => w.activeTasks >= 3 && w.activeTasks <= 5);
+  if (wl === 'high')   list = list.filter(w => w.activeTasks >= 6);
+  if (search) list = list.filter(w => w.name.toLowerCase().includes(search) || w.department.toLowerCase().includes(search));
+
+  // Sort by activeTasks desc
+  list.sort((a, b) => b.activeTasks - a.activeTasks);
+
+  if (countEl) countEl.textContent = `${list.length} worker${list.length !== 1 ? 's' : ''}`;
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">No workers match filters</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map((w, i) => {
+    const color   = workerAvColor(w.id);
+    const wlCls   = workloadClass(w.activeTasks);
+    const assigned = reports.filter(r => r.assignedWorkerId === w.id && !['resolved','closed'].includes(r.status));
+    return `
+      <tr>
+        <td><span class="mono-id">${i + 1}</span></td>
+        <td>
+          <div class="worker-av-wrap">
+            <div class="worker-av" style="background:${color}">${workerInitials(w.name)}</div>
+            <div>
+              <div class="worker-name">${w.name}</div>
+              <div class="worker-meta">${w.id}${w.phone ? ' · ' + w.phone : ''}</div>
+            </div>
+          </div>
+        </td>
+        <td><span class="dept-tag ${deptClass(w.department)}">${deptIcon(w.department)} ${w.department}</span></td>
+        <td><span class="exp-stars">${expStars(w.experience)}</span></td>
+        <td><span style="font-family:var(--mono);font-weight:700;color:var(--text)">${w.activeTasks}</span>
+          ${assigned.length ? `<span style="font-size:10px;color:var(--text3);margin-left:4px">(${assigned.length} active)</span>` : ''}
+        </td>
+        <td>${workloadBarHtml(w.activeTasks)}</td>
+        <td>${workloadLabel(w.activeTasks)}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="view-worker-btn" onclick="openWorkerDetail('${w.id}')">View →</button>
+            <button class="view-worker-btn" style="color:var(--red)" onclick="deleteWorker('${w.id}')">Remove</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function renderUnassignedList() {
+  const el      = document.getElementById('unassignedList');
+  const countEl = document.getElementById('unassignedCount');
+  if (!el) return;
+
+  const unassigned = reports.filter(r =>
+    !r.assignedWorkerId &&
+    !['resolved', 'closed'].includes(r.status)
+  );
+
+  if (countEl) countEl.textContent = `${unassigned.length} issue${unassigned.length !== 1 ? 's' : ''}`;
+
+  if (!unassigned.length) {
+    el.innerHTML = `<div style="color:var(--green);font-size:13px;padding:8px 0;display:flex;align-items:center;gap:8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      All active issues have been assigned to a worker!
+    </div>`;
+    return;
+  }
+
+  const typeCounts = computePriorities(reports);
+  el.innerHTML = unassigned.slice(0, 10).map(r => {
+    const pri = getPriority(r.issueType, typeCounts);
+    const suggested = getWorkerSuggestion(r);
+    return `
+      <div class="unassigned-row">
+        <div>${priHTML(pri, typeCounts[r.issueType] || 0)}</div>
+        <div class="unassigned-info">
+          <div class="unassigned-title">${r.issueType}</div>
+          <div class="unassigned-meta"><span class="mono-id">${r.id}</span> · ${r.description.slice(0, 50)}…</div>
+        </div>
+        ${suggested ? `
+          <div style="font-size:11px;color:var(--text3);white-space:nowrap">
+            Suggest: <strong style="color:var(--teal)">${suggested.name}</strong>
+          </div>
+          <button class="assign-btn" onclick="assignWorkerToIssue('${r.id}','${suggested.id}',false)">
+            Assign →
+          </button>` : ''}
+        <button class="btn btn-outline btn-sm" style="font-size:11px" onclick="openPanel('${r.id}')">Open</button>
+      </div>`;
+  }).join('');
+
+  if (unassigned.length > 10) {
+    el.innerHTML += `<div style="font-size:11px;color:var(--text3);padding-top:8px">+${unassigned.length - 10} more unassigned issues — go to All Issues to view</div>`;
+  }
+}
+
+// ─── Worker Detail Modal ──────────────────────────────
+
+window.openWorkerDetail = function (workerId) {
+  const w = workers.find(x => x.id === workerId);
+  if (!w) return;
+
+  const color = workerAvColor(w.id);
+  const assignedIssues = reports.filter(r => r.assignedWorkerId === workerId);
+  const active = assignedIssues.filter(r => !['resolved','closed'].includes(r.status));
+  const done   = assignedIssues.filter(r => ['resolved','closed'].includes(r.status));
+
+  document.getElementById('workerDetailTitle').textContent = w.name;
+
+  document.getElementById('workerDetailBody').innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      <div class="worker-av" style="background:${color};width:52px;height:52px;font-size:18px">${workerInitials(w.name)}</div>
+      <div>
+        <div style="font-family:var(--head);font-size:17px;font-weight:700;color:var(--text)">${w.name}</div>
+        <div style="margin-top:4px">
+          <span class="dept-tag ${deptClass(w.department)}">${deptIcon(w.department)} ${w.department}</span>
+        </div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        ${workloadLabel(w.activeTasks)}
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">${w.activeTasks} active task${w.activeTasks !== 1 ? 's' : ''}</div>
+      </div>
+    </div>
+
+    <div class="ig" style="margin-bottom:18px">
+      <div class="ic"><label>Worker ID</label><div class="v m">${w.id}</div></div>
+      <div class="ic"><label>Experience</label><div class="v"><span class="exp-stars">${expStars(w.experience)}</span></div></div>
+      <div class="ic"><label>Phone</label><div class="v">${w.phone || '—'}</div></div>
+      <div class="ic"><label>Tasks Completed</label><div class="v" style="color:var(--green)">${done.length}</div></div>
+    </div>
+
+    <div class="p-sec-lbl">Workload Bar</div>
+    <div style="margin:8px 0 18px">${workloadBarHtml(w.activeTasks)}</div>
+
+    <div class="p-sec-lbl">Active Assignments (${active.length})</div>
+    <div style="margin-bottom:18px">
+      ${active.length ? active.map(r => `
+        <div class="assigned-issue-row" onclick="openPanel('${r.id}')">
+          ${badge(r.status)}
+          <span class="type-pill">${r.issueType}</span>
+          <span style="flex:1;font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description.slice(0,60)}…</span>
+          <span class="mono-id">${r.id}</span>
+        </div>`).join('')
+        : '<div style="font-size:12px;color:var(--text3)">No active assignments.</div>'}
+    </div>
+
+    <div class="p-sec-lbl">Completed (${done.length})</div>
+    <div>
+      ${done.length ? done.slice(0,5).map(r => `
+        <div class="assigned-issue-row" style="opacity:.7" onclick="openPanel('${r.id}')">
+          ${badge(r.status)}
+          <span class="type-pill">${r.issueType}</span>
+          <span style="flex:1;font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description.slice(0,60)}…</span>
+          <span class="mono-id">${r.id}</span>
+        </div>`).join('')
+        : '<div style="font-size:12px;color:var(--text3)">None yet.</div>'}
+    </div>`;
+
+  document.getElementById('workerDetailFt').innerHTML = `
+    <button class="btn btn-outline" onclick="openEditWorkerModal('${w.id}')">✏️ Edit</button>
+    <button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="deleteWorker('${w.id}');closeWorkerDetailModal()">Remove Worker</button>
+    <button class="btn btn-outline" style="margin-left:auto" onclick="closeWorkerDetailModal()">Close</button>`;
+
+  document.getElementById('workerDetailBackdrop').classList.add('open');
+  document.getElementById('workerDetailModal').classList.add('open');
+};
+
+window.closeWorkerDetailModal = function () {
+  document.getElementById('workerDetailBackdrop').classList.remove('open');
+  document.getElementById('workerDetailModal').classList.remove('open');
+};
+
+// ─── Add Worker Modal ─────────────────────────────────
+
+let editingWorkerId = null;
+
+window.openAddWorkerModal = function () {
+  editingWorkerId = null;
+  document.getElementById('modalTitle').textContent = 'Add New Worker';
+  document.getElementById('saveWorkerBtn').textContent = 'Save Worker';
+  ['wName','wEmpId','wPhone'].forEach(id => (document.getElementById(id).value = ''));
+  document.getElementById('wDept').value = '';
+  document.getElementById('wExp').value  = '';
+  document.getElementById('addWorkerBackdrop').classList.add('open');
+  document.getElementById('addWorkerModal').classList.add('open');
+  setTimeout(() => document.getElementById('wName').focus(), 200);
+};
+
+window.openEditWorkerModal = function (workerId) {
+  const w = workers.find(x => x.id === workerId);
+  if (!w) return;
+  editingWorkerId = workerId;
+  document.getElementById('modalTitle').textContent = 'Edit Worker';
+  document.getElementById('saveWorkerBtn').textContent = 'Update Worker';
+  document.getElementById('wName').value  = w.name;
+  document.getElementById('wDept').value  = w.department;
+  document.getElementById('wExp').value   = w.experience;
+  document.getElementById('wEmpId').value = w.id;
+  document.getElementById('wPhone').value = w.phone || '';
+  closeWorkerDetailModal();
+  document.getElementById('addWorkerBackdrop').classList.add('open');
+  document.getElementById('addWorkerModal').classList.add('open');
+  setTimeout(() => document.getElementById('wName').focus(), 200);
+};
+
+window.closeAddWorkerModal = function () {
+  document.getElementById('addWorkerBackdrop').classList.remove('open');
+  document.getElementById('addWorkerModal').classList.remove('open');
+  editingWorkerId = null;
+};
+
+window.saveWorker = function () {
+  const name = document.getElementById('wName').value.trim();
+  const dept = document.getElementById('wDept').value;
+  const exp  = parseInt(document.getElementById('wExp').value) || 0;
+  const empId = document.getElementById('wEmpId').value.trim();
+  const phone = document.getElementById('wPhone').value.trim();
+
+  if (!name) { toast('Worker name is required', 'err'); return; }
+  if (!dept) { toast('Please select a department', 'err'); return; }
+
+  if (editingWorkerId) {
+    const w = workers.find(x => x.id === editingWorkerId);
+    if (w) {
+      w.name       = name;
+      w.department = dept;
+      w.experience = exp;
+      w.phone      = phone;
+      saveWorkers(workers);
+      closeAddWorkerModal();
+      renderWorkersPage();
+      toast(`${name} updated`, 'ok');
+    }
+    return;
+  }
+
+  const newId = empId || ('W' + String(Date.now()).slice(-5));
+  if (workers.find(w => w.id === newId)) {
+    toast('Worker ID already exists', 'err'); return;
+  }
+
+  workers.push({ id: newId, name, department: dept, experience: exp, activeTasks: 0, phone });
+  saveWorkers(workers);
+  closeAddWorkerModal();
+  renderWorkersPage();
+  toast(`${name} added to ${dept}`, 'ok');
+};
+
+window.deleteWorker = function (workerId) {
+  const w = workers.find(x => x.id === workerId);
+  if (!w) return;
+  if (!confirm(`Remove worker "${w.name}" from the roster? Their active assignments will be unassigned.`)) return;
+
+  // Unassign their issues
+  reports.forEach(r => {
+    if (r.assignedWorkerId === workerId) {
+      r.assignedWorkerId   = null;
+      r.assignedWorkerName = null;
+    }
+  });
+
+  workers = workers.filter(x => x.id !== workerId);
+  saveWorkers(workers);
+  renderWorkersPage();
+  refreshAll();
+  toast(`${w.name} removed`, 'info');
+};
+
+// ─── Clear worker filters ─────────────────────────────
+
+window.clearWorkerFilters = function () {
+  ['wfDept','wfWorkload'].forEach(id => (document.getElementById(id).value = ''));
+  document.getElementById('wfSearch').value = '';
+  renderWorkersPage();
+};
+
+// ─── Export workers CSV ────────────────────────────────
+
+window.exportWorkersCSV = function () {
+  const rows = [
+    ['ID','Name','Department','Experience (yrs)','Active Tasks','Phone'],
+    ...workers.map(w => [w.id, `"${w.name}"`, `"${w.department}"`, w.experience, w.activeTasks, w.phone || '']),
+  ];
+  const a   = document.createElement('a');
+  a.href    = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n'));
+  a.download = `civic-workers-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('Workers CSV exported', 'ok');
+};
+
+// ─── Panel enhancement: Worker Assignment Section ─────
+
+// Patch openPanel to inject worker assignment UI
+const _origOpenPanel = window.openPanel;
+window.openPanel = function (id) {
+  _origOpenPanel(id);
+  // Inject assignment section after the "Update Report" form section
+  setTimeout(() => injectWorkerAssignmentSection(id), 50);
+};
+
+function injectWorkerAssignmentSection(issueId) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+
+  // Find panelBody and append our section before the last p-sec (timeline)
+  const panelBody = document.getElementById('panelBody');
+  if (!panelBody) return;
+
+  // Remove existing worker section if present
+  const existing = panelBody.querySelector('.worker-assign-inject');
+  if (existing) existing.remove();
+
+  const typeCounts = computePriorities(reports);
+  const pri        = getPriority(r.issueType, typeCounts);
+  const isHighPri  = ['critical', 'high'].includes(pri);
+  const dept       = ROUTING[r.issueType] || '';
+  const suggested  = getWorkerSuggestion(r);
+
+  // Workers filtered by dept first, then rest
+  const deptWorkers   = workers.filter(w => w.department === dept);
+  const otherWorkers  = workers.filter(w => w.department !== dept);
+  const displayList   = [...deptWorkers.sort((a,b) => a.activeTasks - b.activeTasks),
+                         ...otherWorkers.sort((a,b) => a.activeTasks - b.activeTasks)].slice(0, 8);
+
+  const currentWorker = r.assignedWorkerId ? workers.find(w => w.id === r.assignedWorkerId) : null;
+
+  const section = document.createElement('div');
+  section.className = 'p-sec worker-assign-inject';
+  section.innerHTML = `
+    <div class="p-sec-lbl">Worker Assignment</div>
+    ${isHighPri ? `<div style="background:var(--red-lt);border:1px solid #f5b8b8;border-radius:7px;padding:7px 12px;font-size:12px;color:#8B1A1A;margin-bottom:10px">
+      ⚠️ <strong>${pri.toUpperCase()} priority</strong> — recommending most experienced + least loaded worker
+    </div>` : ''}
+    ${currentWorker ? `
+      <div style="background:var(--green-lt);border:1.5px solid var(--green);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div class="worker-av" style="background:${workerAvColor(currentWorker.id)};width:28px;height:28px;font-size:11px">${workerInitials(currentWorker.name)}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:var(--green)">✓ Assigned to ${currentWorker.name}</div>
+          <div style="font-size:11px;color:var(--text3)">${currentWorker.department} · ${currentWorker.activeTasks} active tasks</div>
+        </div>
+        <button class="assign-btn unassign-btn" onclick="unassignWorkerFromIssue('${issueId}')">Unassign</button>
+      </div>` : ''}
+    ${displayList.length ? displayList.map(w => {
+      const isSuggested = suggested?.id === w.id;
+      const isAssigned  = r.assignedWorkerId === w.id;
+      return `
+        <div class="worker-card ${isSuggested ? 'suggested' : ''} ${isAssigned ? 'assigned-active' : ''}">
+          ${isSuggested ? '<div class="suggest-badge">⭐ Recommended</div>' : ''}
+          <div class="worker-av" style="background:${workerAvColor(w.id)};width:28px;height:28px;font-size:11px">${workerInitials(w.name)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:var(--text)">${w.name}</div>
+            <div style="font-size:10px;color:var(--text3)">${w.department} · ${expStars(w.experience)}</div>
+          </div>
+          <div>${workloadBarHtml(w.activeTasks)}</div>
+          ${isAssigned
+            ? `<button class="assign-btn unassign-btn" onclick="unassignWorkerFromIssue('${issueId}')">Unassign</button>`
+            : `<button class="assign-btn" onclick="assignWorkerToIssue('${issueId}','${w.id}',true)">Assign</button>`}
+        </div>`;
+    }).join('')
+    : '<div style="font-size:12px;color:var(--text3)">No workers available.</div>'}
+    ${workers.length > 8 ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Showing top 8 workers. Go to Workers page to see all.</div>` : ''}`;
+
+  // Insert before the last p-sec (timeline)
+  const secs = panelBody.querySelectorAll('.p-sec');
+  const last  = secs[secs.length - 1];
+  if (last) panelBody.insertBefore(section, last);
+  else panelBody.appendChild(section);
+}
+
+// ─── Patch saveUpdate to trigger workload decrement ───
+
+const _origSaveUpdate = window.saveUpdate;
+window.saveUpdate = async function (id) {
+  const r = reports.find(x => x.id === id);
+  const prevStatus = r?.status;
+  await _origSaveUpdate(id);
+  const newStatus = r?.status;
+  if (prevStatus !== newStatus) onIssueStatusChanged(r, newStatus);
+};
+
+// ─── Wire workers page into nav ───────────────────────
+
+const _origNav = window.nav;
+window.nav = function (page) {
+  _origNav(page);
+  if (page === 'workers') renderWorkersPage();
+};
+
+// ─── Init worker badge on load ────────────────────────
+
+updateWorkerAlertBadge();
+
+
+// ══════════════════════════════════════════════════════════
+//  PROOF OF EXECUTION SYSTEM
+//  Stores proof data in localStorage (proofStore).
+//  Status flow: submitted→acknowledged→in_progress→completed→verified
+// ══════════════════════════════════════════════════════════
+
+const POE_STORE_KEY = 'civicdesk_poe_v1';
+const POE_FLOW = ['submitted','acknowledged','in_progress','completed','verified','resolved','closed'];
+const POE_FLOW_LABELS = ['Submitted','Acknowledged','In Progress','Completed','Verified','Resolved','Closed'];
+
+// ─── PoE localStorage store ───────────────────────────
+
+function loadPoeStore() {
+  try { return JSON.parse(localStorage.getItem(POE_STORE_KEY) || '{}'); } catch { return {}; }
+}
+function savePoeStore(s) {
+  try { localStorage.setItem(POE_STORE_KEY, JSON.stringify(s)); } catch {}
+}
+
+let poeStore = loadPoeStore();
+
+function getPoe(issueId) { return poeStore[issueId] || {}; }
+
+function setPoe(issueId, data) {
+  poeStore[issueId] = { ...(poeStore[issueId] || {}), ...data };
+  savePoeStore(poeStore);
+}
+
+// ─── Current issue being acted on ─────────────────────
+let poeCurrentIssueId  = null;
+let poeSelectedFile    = null;
+let verifyCurrentIssueId = null;
+let ratingCurrentIssueId = null;
+let currentRatingValue   = 0;
+
+// ─── Status Flow Bar HTML ──────────────────────────────
+
+function statusFlowBarHtml(currentStatus) {
+  const si = POE_FLOW.indexOf(currentStatus);
+  return `<div class="status-flow-bar">` +
+    POE_FLOW.map((s, i) => {
+      const done = i < si;
+      const cur  = i === si;
+      const cls  = done ? 'done' : cur ? 'cur' : '';
+      const icon = done ? '✓' : (i + 1);
+      return `
+        <div class="sf-step">
+          <div class="sf-dot-wrap">
+            <div class="sf-dot ${cls}">${icon}</div>
+            <div class="sf-label ${cls}">${POE_FLOW_LABELS[i]}</div>
+          </div>
+        </div>
+        ${i < POE_FLOW.length - 1 ? `<div class="sf-line ${done ? 'done' : ''}"></div>` : ''}`;
+    }).join('') +
+  `</div>`;
+}
+
+// ─── Stars HTML helper ─────────────────────────────────
+
+function starsHtml(n, total = 5) {
+  return Array.from({length: total}, (_, i) =>
+    `<span class="${i < n ? 'star-filled' : 'star-empty'}">★</span>`
+  ).join('');
+}
+
+// ─── Inject PoE section into the slide panel ──────────
+
+function injectPoESection(issueId) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+
+  const panelBody = document.getElementById('panelBody');
+  if (!panelBody) return;
+
+  // Remove old PoE section if present
+  panelBody.querySelector('.poe-inject')?.remove();
+
+  const poe = getPoe(issueId);
+  const beforeUrl = r.images?.[0]?.url || null;
+
+  const section = document.createElement('div');
+  section.className = 'p-sec poe-inject';
+
+  // ── Build PoE section content by status ──────────────
+  let inner = '';
+
+  // Status flow bar always on top
+  inner += `<div class="p-sec-lbl">📍 Status Flow</div>`;
+  inner += statusFlowBarHtml(r.status);
+
+  // ── Worker: In Progress → show upload proof button ───
+  if (r.status === 'in_progress') {
+    inner += `
+      <div class="poe-panel-section">
+        <div style="font-size:12px;font-weight:700;color:#3336CC;margin-bottom:6px">📸 Proof of Execution</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Worker must upload an after-photo and mark this issue as Completed.</div>
+        ${beforeUrl ? `
+          <div class="poe-img-col" style="margin-bottom:10px">
+            <div class="poe-img-lbl">Before Photo (Citizen)</div>
+            <img class="poe-img-thumb" src="${beforeUrl}" onclick="openLbUrl('${beforeUrl}')" alt="Before"/>
+          </div>` : ''}
+        <button class="worker-proof-btn" onclick="openPoeModal('${issueId}')">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Upload Proof & Mark Completed
+        </button>
+      </div>`;
+  }
+
+  // ── Completed → show proof + admin verify buttons ────
+  else if (r.status === 'completed') {
+    const proofUrl = poe.proofImageUrl || null;
+    inner += `
+      <div class="poe-panel-section">
+        <div style="font-size:12px;font-weight:700;color:#3336CC;margin-bottom:4px">📸 Proof Submitted — Awaiting Admin Verification</div>
+        ${poe.proofNote ? `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-style:italic">"${poe.proofNote}"</div>` : ''}
+        <div class="poe-compare-mini">
+          <div class="poe-img-col">
+            <div class="poe-img-lbl">Before (Citizen)</div>
+            ${beforeUrl
+              ? `<img class="poe-img-thumb" src="${beforeUrl}" onclick="openLbUrl('${beforeUrl}')" alt="Before"/>`
+              : `<div class="poe-no-img">No before photo</div>`}
+          </div>
+          <div class="poe-img-col">
+            <div class="poe-img-lbl">After (Worker Proof)</div>
+            ${proofUrl
+              ? `<img class="poe-img-thumb" src="${proofUrl}" onclick="openLbUrl('${proofUrl}')" alt="After"/>`
+              : `<div class="poe-no-img">No proof uploaded</div>`}
+          </div>
+        </div>
+        <div class="poe-action-row">
+          <button class="poe-approve-btn" onclick="adminApproveFromPanel('${issueId}')">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            Approve
+          </button>
+          <button class="poe-reject-btn" onclick="adminRejectFromPanel('${issueId}')">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Reject
+          </button>
+          <button class="poe-full-compare-btn" onclick="openVerifyModal('${issueId}')">Full View</button>
+        </div>
+      </div>`;
+  }
+
+  // ── Verified → show green banner + rating prompt ─────
+  else if (r.status === 'verified') {
+    const proofUrl = poe.proofImageUrl || null;
+    inner += `
+      <div class="verified-banner">
+        <div class="verified-icon">✅</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--green)">Admin Verified</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${poe.adminNote ? `"${poe.adminNote}"` : 'Work approved as complete'}</div>
+        </div>
+      </div>
+      <div class="poe-compare-mini" style="margin-bottom:10px">
+        <div class="poe-img-col">
+          <div class="poe-img-lbl">Before</div>
+          ${beforeUrl ? `<img class="poe-img-thumb" src="${beforeUrl}" onclick="openLbUrl('${beforeUrl}')" alt="Before"/>` : `<div class="poe-no-img">—</div>`}
+        </div>
+        <div class="poe-img-col">
+          <div class="poe-img-lbl">After (Verified)</div>
+          ${proofUrl ? `<img class="poe-img-thumb" src="${proofUrl}" onclick="openLbUrl('${proofUrl}')" alt="After"/>` : `<div class="poe-no-img">—</div>`}
+        </div>
+      </div>`;
+
+    // Rating prompt if not yet rated
+    const existingRating = poe.rating || null;
+    if (!existingRating) {
+      inner += `
+        <div style="background:var(--amber-lt);border:1.5px solid #f0dc80;border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:12px">
+          <span style="font-size:20px">⭐</span>
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:700;color:#7A5A00">Citizen Feedback Pending</div>
+            <div style="font-size:11px;color:var(--text3)">Ask citizen to rate the resolution</div>
+          </div>
+          <button class="poe-full-compare-btn" style="border-color:#f0dc80" onclick="openRatingModal('${issueId}')">Rate Now</button>
+        </div>`;
+    } else {
+      inner += `
+        <div class="feedback-display">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px">Citizen Rating</div>
+          <div class="feedback-stars">${starsHtml(existingRating)}</div>
+          <div style="font-size:13px;font-weight:700;color:#92400E">${existingRating}/5 stars</div>
+          ${poe.ratingComment ? `<div style="font-size:12px;color:var(--text2);margin-top:6px;font-style:italic">"${poe.ratingComment}"</div>` : ''}
+        </div>`;
+    }
+  }
+
+  // ── Rejected → show red banner + re-upload note ──────
+  else if (poe.rejected) {
+    inner += `
+      <div class="rejected-banner">
+        <span style="font-size:22px">❌</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--red)">Proof Rejected — Back to In Progress</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${poe.adminNote ? `Admin note: "${poe.adminNote}"` : 'Re-upload better proof photo'}</div>
+        </div>
+      </div>`;
+  }
+
+  section.innerHTML = `<div class="p-sec-lbl">Proof of Execution</div>${inner}`;
+
+  // Insert as second-to-last p-sec (before timeline)
+  const secs = panelBody.querySelectorAll('.p-sec');
+  const last = secs[secs.length - 1];
+  if (last) panelBody.insertBefore(section, last);
+  else panelBody.appendChild(section);
+}
+
+// ─── Open URL in lightbox ──────────────────────────────
+
+window.openLbUrl = function (url) {
+  document.getElementById('lbImg').src = url;
+  document.getElementById('lightbox').classList.add('open');
+};
+
+// ─── Worker: Proof Upload Modal ───────────────────────
+
+window.openPoeModal = function (issueId) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+  poeCurrentIssueId = issueId;
+  poeSelectedFile   = null;
+
+  // Reset UI
+  document.getElementById('poeNote').value = '';
+  document.getElementById('poePreview').style.display = 'none';
+  document.getElementById('poeUploadInner').style.display = 'flex';
+  document.getElementById('poeUploadZone').classList.remove('has-file');
+  document.getElementById('poeFileInput').value = '';
+
+  // Info bar
+  const typeCounts = computePriorities(reports);
+  const pri = getPriority(r.issueType, typeCounts);
+  document.getElementById('poeInfoBar').innerHTML = `
+    ${badge(r.status)} ${priHTML(pri, typeCounts[r.issueType] || 0)}
+    <span style="font-size:12px;color:var(--text2)">${r.issueType}</span>
+    <span class="mono-id">${r.id}</span>`;
+
+  // Show before photo if citizen uploaded one
+  const beforeUrl = r.images?.[0]?.url || null;
+  const bs = document.getElementById('poeBeforeSection');
+  if (beforeUrl) {
+    document.getElementById('poeBeforeImg').src = beforeUrl;
+    bs.style.display = 'block';
+  } else {
+    bs.style.display = 'none';
+  }
+
+  document.getElementById('poeBackdrop').classList.add('open');
+  document.getElementById('poeModal').classList.add('open');
+};
+
+window.closePoeModal = function () {
+  document.getElementById('poeBackdrop').classList.remove('open');
+  document.getElementById('poeModal').classList.remove('open');
+  poeCurrentIssueId = null;
+  poeSelectedFile   = null;
+};
+
+window.handlePoeFileSelect = function (event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { toast('File too large — max 10MB', 'err'); return; }
+
+  poeSelectedFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('poePreview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    document.getElementById('poeUploadInner').style.display = 'none';
+    document.getElementById('poeUploadZone').classList.add('has-file');
+  };
+  reader.readAsDataURL(file);
+};
+
+window.submitProofOfExecution = async function () {
+  if (!poeCurrentIssueId) return;
+  if (!poeSelectedFile)  { toast('Please upload a proof photo', 'err'); return; }
+
+  const r = reports.find(x => x.id === poeCurrentIssueId);
+  if (!r) return;
+
+  const btn = document.getElementById('poeSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+
+  // Convert image to base64 data URL (stored locally)
+  const proofDataUrl = await fileToDataUrl(poeSelectedFile);
+  const note = document.getElementById('poeNote').value.trim();
+
+  // Save to PoE store
+  setPoe(poeCurrentIssueId, {
+    proofImageUrl:   proofDataUrl,
+    proofNote:       note,
+    proofUploadedAt: new Date().toISOString(),
+    rejected:        false,
+  });
+
+  // Update issue status
+  r.status = 'completed';
+  await pushUpdate(poeCurrentIssueId, 'completed', r.assigned, `Proof uploaded: ${note || 'No note'}`);
+
+  closePoeModal();
+  refreshAll();
+  toast(`Proof submitted for ${poeCurrentIssueId} — awaiting admin verification`, 'ok');
+};
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Admin: Verify Modal (full before/after view) ─────
+
+window.openVerifyModal = function (issueId) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+  verifyCurrentIssueId = issueId;
+
+  const poe = getPoe(issueId);
+  const beforeUrl = r.images?.[0]?.url || null;
+  const afterUrl  = poe.proofImageUrl  || null;
+
+  // Info bar
+  const typeCounts = computePriorities(reports);
+  const pri = getPriority(r.issueType, typeCounts);
+  document.getElementById('verifyInfoBar').innerHTML = `
+    ${badge(r.status)} ${priHTML(pri, typeCounts[r.issueType] || 0)}
+    <span style="font-size:12px;color:var(--text2)">${r.issueType}</span>
+    <span class="mono-id">${r.id}</span>
+    ${r.assignedWorkerName ? `<span style="font-size:12px;color:var(--teal)">Worker: ${r.assignedWorkerName}</span>` : ''}`;
+
+  // Before image
+  const bImg = document.getElementById('verifyBeforeImg');
+  const bNone = document.getElementById('verifyBeforeNoImg');
+  if (beforeUrl) { bImg.src = beforeUrl; bImg.style.display = 'block'; bNone.style.display = 'none'; }
+  else           { bImg.style.display = 'none'; bNone.style.display = 'flex'; }
+
+  // After image
+  const aImg = document.getElementById('verifyAfterImg');
+  const aNone = document.getElementById('verifyAfterNoImg');
+  if (afterUrl) { aImg.src = afterUrl; aImg.style.display = 'block'; aNone.style.display = 'none'; }
+  else          { aImg.style.display = 'none'; aNone.style.display = 'flex'; }
+
+  // Worker note
+  const noteBox = document.getElementById('verifyNoteBox');
+  noteBox.textContent = poe.proofNote ? `Worker note: "${poe.proofNote}"` : '';
+
+  document.getElementById('adminVerifyNote').value = '';
+
+  document.getElementById('verifyBackdrop').classList.add('open');
+  document.getElementById('verifyModal').classList.add('open');
+};
+
+window.closeVerifyModal = function () {
+  document.getElementById('verifyBackdrop').classList.remove('open');
+  document.getElementById('verifyModal').classList.remove('open');
+  verifyCurrentIssueId = null;
+};
+
+window.adminApproveIssue = async function () {
+  if (!verifyCurrentIssueId) return;
+  const note = document.getElementById('adminVerifyNote').value.trim();
+  await _adminApprove(verifyCurrentIssueId, note);
+  closeVerifyModal();
+};
+
+window.adminRejectIssue = async function () {
+  if (!verifyCurrentIssueId) return;
+  const note = document.getElementById('adminVerifyNote').value.trim();
+  await _adminReject(verifyCurrentIssueId, note);
+  closeVerifyModal();
+};
+
+// Panel quick-action buttons
+window.adminApproveFromPanel = async function (issueId) {
+  const note = prompt('Admin approval note (optional):') || '';
+  await _adminApprove(issueId, note);
+};
+
+window.adminRejectFromPanel = async function (issueId) {
+  const note = prompt('Rejection reason (required):') || 'Proof insufficient';
+  await _adminReject(issueId, note);
+};
+
+async function _adminApprove(issueId, note) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+
+  setPoe(issueId, { adminVerified: true, adminNote: note, verifiedAt: new Date().toISOString(), rejected: false });
+  r.status = 'verified';
+  r.adminVerified = true;
+  r.adminNote = note;
+
+  await pushUpdate(issueId, 'verified', r.assigned, `Admin approved: ${note || 'Verified OK'}`);
+  refreshAll();
+  toast(`✅ ${issueId} verified and approved`, 'ok');
+
+  // Refresh panel if open
+  if (document.getElementById('panel')?.classList.contains('open')) {
+    setTimeout(() => openPanel(issueId), 80);
+  }
+}
+
+async function _adminReject(issueId, note) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+
+  setPoe(issueId, { adminVerified: false, adminNote: note, rejected: true, proofImageUrl: null });
+  r.status = 'in_progress';
+  r.adminVerified = false;
+
+  await pushUpdate(issueId, 'in_progress', r.assigned, `Admin rejected proof: ${note}`);
+  refreshAll();
+  toast(`❌ Proof rejected — ${issueId} sent back to In Progress`, 'err');
+
+  if (document.getElementById('panel')?.classList.contains('open')) {
+    setTimeout(() => openPanel(issueId), 80);
+  }
+}
+
+// ─── Citizen: Star Rating Modal ───────────────────────
+
+window.openRatingModal = function (issueId) {
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+  ratingCurrentIssueId = issueId;
+  currentRatingValue   = 0;
+
+  document.getElementById('ratingIssueInfo').innerHTML = `
+    <strong>${r.issueType}</strong> — <span class="mono-id">${r.id}</span><br>
+    <span style="font-size:12px;color:var(--text3)">${r.description?.slice(0, 80)}…</span>`;
+
+  document.getElementById('ratingComment').value = '';
+  document.getElementById('ratingLabel').textContent = 'Select a rating';
+  document.getElementById('ratingLabel').classList.remove('rated');
+  document.querySelectorAll('.star').forEach(s => s.classList.remove('active'));
+
+  document.getElementById('ratingBackdrop').classList.add('open');
+  document.getElementById('ratingModal').classList.add('open');
+};
+
+window.closeRatingModal = function () {
+  document.getElementById('ratingBackdrop').classList.remove('open');
+  document.getElementById('ratingModal').classList.remove('open');
+  ratingCurrentIssueId = null;
+};
+
+const RATING_LABELS = ['', '😞 Poor', '😐 Fair', '😊 Good', '😃 Very Good', '🤩 Excellent!'];
+
+window.setRating = function (val) {
+  currentRatingValue = val;
+  document.querySelectorAll('.star').forEach(s => {
+    s.classList.toggle('active', parseInt(s.dataset.val) <= val);
+  });
+  const lbl = document.getElementById('ratingLabel');
+  lbl.textContent = RATING_LABELS[val] || '';
+  lbl.classList.add('rated');
+};
+
+window.submitRating = async function () {
+  if (!ratingCurrentIssueId) return;
+  if (!currentRatingValue)   { toast('Please select a rating', 'err'); return; }
+
+  const comment = document.getElementById('ratingComment').value.trim();
+  const r = reports.find(x => x.id === ratingCurrentIssueId);
+  if (!r) return;
+
+  setPoe(ratingCurrentIssueId, {
+    rating:        currentRatingValue,
+    ratingComment: comment,
+    ratingAt:      new Date().toISOString(),
+  });
+
+  r.rating        = currentRatingValue;
+  r.ratingComment = comment;
+
+  await pushUpdate(ratingCurrentIssueId, r.status, r.assigned, `Citizen rated: ${currentRatingValue}/5 — ${comment}`);
+  closeRatingModal();
+  refreshAll();
+  toast(`⭐ Feedback recorded — ${currentRatingValue}/5 stars`, 'ok');
+
+  // Refresh panel
+  if (document.getElementById('panel')?.classList.contains('open')) {
+    setTimeout(() => openPanel(ratingCurrentIssueId), 80);
+  }
+};
+
+// ─── Patch openPanel (chain with worker inject) ────────
+
+// The worker system already patched openPanel once — we patch again here
+const _poeOrigOpenPanel = window.openPanel;
+window.openPanel = function (id) {
+  _poeOrigOpenPanel(id);
+  setTimeout(() => injectPoESection(id), 80);
+};
+
+// ─── DB reference schema (documentation comment) ──────
+/*
+  MYSQL SCHEMA (reference — for backend integration):
+
+  CREATE TABLE issues (
+    id              VARCHAR(50) PRIMARY KEY,
+    issue_type      VARCHAR(80),
+    description     TEXT,
+    priority        ENUM('low','medium','high','critical'),
+    location_lat    DECIMAL(10,7),
+    location_lng    DECIMAL(10,7),
+    location_name   VARCHAR(255),
+    status          ENUM('submitted','acknowledged','in_progress','completed','verified','resolved','closed') DEFAULT 'submitted',
+    assigned_dept   VARCHAR(80),
+    assigned_worker_id VARCHAR(20),
+    before_image_url TEXT,
+    proof_image_url  TEXT,
+    proof_note       TEXT,
+    proof_uploaded_at DATETIME,
+    admin_verified   TINYINT(1),
+    admin_note       TEXT,
+    citizen_rating   TINYINT,
+    rating_comment   TEXT,
+    rating_at        DATETIME,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME ON UPDATE CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE workers (
+    id           VARCHAR(20) PRIMARY KEY,
+    name         VARCHAR(100),
+    department   VARCHAR(80),
+    experience   INT,
+    active_tasks INT DEFAULT 0,
+    phone        VARCHAR(20)
+  );
+
+  REST API ENDPOINTS:
+  POST   /api/issues/:id/proof           — worker uploads proof image
+  PATCH  /api/issues/:id/verify          — admin approves (body: {approved:true, note})
+  PATCH  /api/issues/:id/verify          — admin rejects (body: {approved:false, note})
+  POST   /api/issues/:id/rating          — citizen submits rating (body: {rating, comment})
+  GET    /api/issues/:id/proof           — get before/after images for comparison
+*/
+
+
 
 
 

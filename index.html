@@ -62,6 +62,11 @@
         All Issues
         <span class="nav-count" id="pendingCount">0</span>
       </div>
+      <div class="nav-item" data-page="workers" onclick="nav('workers')">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Workers
+        <span class="nav-count" id="workerAlertCount" style="background:var(--amber)">0</span>
+      </div>
       <div class="nav-item" data-page="analytics" onclick="nav('analytics')">
         <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Analytics
@@ -96,17 +101,11 @@
 
             <div class="sd-chart-wrapper">
               <div class="sd-donut-container">
-                <div class="sd-donut"></div>
+                <div class="sd-donut" id="sdDonut"></div>
               </div>
             </div>
 
-            <div class="sd-legend">
-              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#E85D24"></div><span>submitted (20%)</span></div>
-              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#F29E02"></div><span>acknowledged (20%)</span></div>
-              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#22C55E"></div><span>in progress (20%)</span></div>
-              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#6B7280"></div><span>resolved (0%)</span></div>
-              <div class="sd-leg-item"><div class="sd-leg-dot" style="background:#5E62FA"></div><span>closed (0%)</span></div>
-            </div>
+            <div class="sd-legend" id="sdLegend"></div>
           </div>
         </div>
 
@@ -196,6 +195,8 @@
             <option value="submitted">Submitted</option>
             <option value="acknowledged">Acknowledged</option>
             <option value="in_progress">In Progress</option>
+            <option value="completed">⏳ Completed (Pending Verify)</option>
+            <option value="verified">✅ Verified</option>
             <option value="resolved">Resolved</option>
             <option value="closed">Closed</option>
           </select>
@@ -272,6 +273,84 @@
       </div>
     </div><!-- /analytics -->
 
+    <!-- ─── WORKERS ─── -->
+    <div class="page" id="page-workers">
+      <div class="page-scroll">
+        <div class="page-head">
+          <div>
+            <div class="page-title">Worker Assignment</div>
+            <div class="page-sub">Manage field workers, track workload, and assign civic issues</div>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-outline btn-sm" onclick="exportWorkersCSV()">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+            <button class="btn btn-primary btn-sm" id="addWorkerBtn" onclick="openAddWorkerModal()">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Worker
+            </button>
+          </div>
+        </div>
+
+        <!-- Worker Stat Cards -->
+        <div class="worker-stats-row" id="workerStatsRow"></div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar" style="margin-top:16px">
+          <select class="fsel" id="wfDept" onchange="renderWorkersPage()">
+            <option value="">All Departments</option>
+            <option>Electrical Dept</option>
+            <option>Roads &amp; Infra</option>
+            <option>Water Supply</option>
+            <option>Sanitation</option>
+            <option>Parks &amp; Env.</option>
+            <option>General Admin</option>
+          </select>
+          <select class="fsel" id="wfWorkload" onchange="renderWorkersPage()">
+            <option value="">All Workloads</option>
+            <option value="low">🟢 Low (0–2)</option>
+            <option value="medium">🟡 Medium (3–5)</option>
+            <option value="high">🔴 High (6+)</option>
+          </select>
+          <input type="text" class="fsel" id="wfSearch" placeholder="Search worker name…" oninput="renderWorkersPage()" style="min-width:180px"/>
+          <button class="chip" onclick="clearWorkerFilters()">✕ Clear</button>
+        </div>
+
+        <!-- Worker Roster Table -->
+        <div class="card" style="margin-top:4px">
+          <div class="card-head">
+            <span class="card-title">Worker Roster</span>
+            <span style="font-size:12px;color:var(--text3)" id="workerCount"></span>
+          </div>
+          <table id="workersTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Worker</th>
+                <th>Department</th>
+                <th>Experience</th>
+                <th>Active Tasks</th>
+                <th>Workload</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="workersTbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Unassigned Issues Panel -->
+        <div class="card" style="margin-top:14px;padding:18px">
+          <div class="card-head" style="padding:0 0 13px;border-bottom:1.5px solid var(--border);margin-bottom:13px">
+            <span class="card-title">Unassigned Issues</span>
+            <span style="font-size:12px;color:var(--text3)" id="unassignedCount"></span>
+          </div>
+          <div id="unassignedList"></div>
+        </div>
+      </div>
+    </div><!-- /workers -->
+
   </main>
 </div><!-- /.shell -->
 
@@ -298,6 +377,174 @@
 <!-- ═══════ TOAST STACK ═══════ -->
 <div class="toast-stack" id="toasts"></div>
 
+
+<!-- ═══════ ADD WORKER MODAL ═══════ -->
+<div class="modal-backdrop" id="addWorkerBackdrop" onclick="closeAddWorkerModal()"></div>
+<div class="modal" id="addWorkerModal">
+  <div class="modal-hd">
+    <div class="modal-title" id="modalTitle">Add New Worker</div>
+    <button class="panel-close" onclick="closeAddWorkerModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="fg">
+      <label>Full Name <span style="color:var(--red)">*</span></label>
+      <input type="text" class="fc" id="wName" placeholder="e.g. Ramesh Kumar"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="fg">
+        <label>Department <span style="color:var(--red)">*</span></label>
+        <select class="fc" id="wDept">
+          <option value="">Select department</option>
+          <option>Electrical Dept</option>
+          <option>Roads &amp; Infra</option>
+          <option>Water Supply</option>
+          <option>Sanitation</option>
+          <option>Parks &amp; Env.</option>
+          <option>General Admin</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Experience (years)</label>
+        <input type="number" class="fc" id="wExp" min="0" max="40" placeholder="e.g. 5"/>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Employee ID</label>
+      <input type="text" class="fc" id="wEmpId" placeholder="Auto-generated if empty"/>
+    </div>
+    <div class="fg">
+      <label>Phone</label>
+      <input type="text" class="fc" id="wPhone" placeholder="Optional"/>
+    </div>
+  </div>
+  <div class="modal-ft">
+    <button class="btn btn-primary" style="flex:1" id="saveWorkerBtn" onclick="saveWorker()">Save Worker</button>
+    <button class="btn btn-outline" onclick="closeAddWorkerModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════ WORKER DETAIL MODAL ═══════ -->
+<div class="modal-backdrop" id="workerDetailBackdrop" onclick="closeWorkerDetailModal()"></div>
+<div class="modal modal-wide" id="workerDetailModal">
+  <div class="modal-hd">
+    <div class="modal-title" id="workerDetailTitle">Worker Details</div>
+    <button class="panel-close" onclick="closeWorkerDetailModal()">✕</button>
+  </div>
+  <div class="modal-body" id="workerDetailBody"></div>
+  <div class="modal-ft" id="workerDetailFt"></div>
+</div>
+
+<!-- ═══════ PROOF OF EXECUTION MODAL (Worker Upload) ═══════ -->
+<div class="modal-backdrop" id="poeBackdrop" onclick="closePoeModal()"></div>
+<div class="modal modal-wide" id="poeModal">
+  <div class="modal-hd">
+    <div class="modal-title">📸 Submit Proof of Completion</div>
+    <button class="panel-close" onclick="closePoeModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="poe-info-bar" id="poeInfoBar"></div>
+    <div class="fg" style="margin-top:14px">
+      <label>After-Work Photo <span style="color:var(--red)">*</span></label>
+      <div class="poe-upload-zone" id="poeUploadZone" onclick="document.getElementById('poeFileInput').click()">
+        <div class="poe-upload-inner" id="poeUploadInner">
+          <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" fill="none" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div class="poe-upload-text">Click to upload completion photo</div>
+          <div class="poe-upload-sub">JPG, PNG, WebP — max 10MB</div>
+        </div>
+        <img id="poePreview" class="poe-preview-img" style="display:none" alt="Proof preview"/>
+      </div>
+      <input type="file" id="poeFileInput" accept="image/*" style="display:none" onchange="handlePoeFileSelect(event)"/>
+    </div>
+    <div class="fg">
+      <label>Completion Note</label>
+      <textarea class="fc" id="poeNote" rows="3" placeholder="Describe work done, materials used, time taken…"></textarea>
+    </div>
+    <div class="poe-before-label" id="poeBeforeSection" style="display:none">
+      <div class="p-sec-lbl" style="margin-bottom:8px">Before Photo (Citizen Upload)</div>
+      <img id="poeBeforeImg" class="poe-before-thumb" alt="Before"/>
+    </div>
+  </div>
+  <div class="modal-ft">
+    <button class="btn btn-primary" style="flex:1" id="poeSubmitBtn" onclick="submitProofOfExecution()">Submit Proof &amp; Complete</button>
+    <button class="btn btn-outline" onclick="closePoeModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════ ADMIN VERIFY MODAL (Before/After Comparison) ═══════ -->
+<div class="modal-backdrop" id="verifyBackdrop" onclick="closeVerifyModal()"></div>
+<div class="modal modal-ultra" id="verifyModal">
+  <div class="modal-hd">
+    <div class="modal-title">🔍 Verify Proof of Execution</div>
+    <button class="panel-close" onclick="closeVerifyModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="verify-info-bar" id="verifyInfoBar"></div>
+    <div class="compare-grid">
+      <div class="compare-col">
+        <div class="compare-label before-label">📷 BEFORE — Citizen Report</div>
+        <div class="compare-img-wrap" id="verifyBeforeWrap">
+          <img id="verifyBeforeImg" alt="Before" class="compare-img"/>
+          <div class="compare-no-img" id="verifyBeforeNoImg" style="display:none">No before photo provided</div>
+        </div>
+      </div>
+      <div class="compare-divider"></div>
+      <div class="compare-col">
+        <div class="compare-label after-label">✅ AFTER — Worker Proof</div>
+        <div class="compare-img-wrap" id="verifyAfterWrap">
+          <img id="verifyAfterImg" alt="After" class="compare-img"/>
+          <div class="compare-no-img" id="verifyAfterNoImg" style="display:none">No proof photo uploaded</div>
+        </div>
+      </div>
+    </div>
+    <div class="verify-note-box" id="verifyNoteBox"></div>
+    <div class="fg" style="margin-top:16px">
+      <label>Admin Note (optional)</label>
+      <textarea class="fc" id="adminVerifyNote" rows="2" placeholder="Add internal note about your decision…"></textarea>
+    </div>
+  </div>
+  <div class="modal-ft">
+    <button class="btn btn-primary" style="flex:1;background:var(--green)" id="approveBtn" onclick="adminApproveIssue()">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Approve &amp; Verify
+    </button>
+    <button class="btn btn-outline" style="color:var(--red);border-color:var(--red);flex:1" id="rejectBtn" onclick="adminRejectIssue()">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Reject — Send Back
+    </button>
+    <button class="btn btn-outline" onclick="closeVerifyModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════ CITIZEN FEEDBACK MODAL ═══════ -->
+<div class="modal-backdrop" id="ratingBackdrop" onclick="closeRatingModal()"></div>
+<div class="modal" id="ratingModal">
+  <div class="modal-hd">
+    <div class="modal-title">⭐ Citizen Feedback</div>
+    <button class="panel-close" onclick="closeRatingModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="rating-issue-info" id="ratingIssueInfo"></div>
+    <div class="fg" style="margin-top:14px;text-align:center">
+      <label style="display:block;margin-bottom:10px">Rate the resolution quality</label>
+      <div class="star-rating" id="starRating">
+        <span class="star" data-val="1" onclick="setRating(1)">★</span>
+        <span class="star" data-val="2" onclick="setRating(2)">★</span>
+        <span class="star" data-val="3" onclick="setRating(3)">★</span>
+        <span class="star" data-val="4" onclick="setRating(4)">★</span>
+        <span class="star" data-val="5" onclick="setRating(5)">★</span>
+      </div>
+      <div class="rating-label" id="ratingLabel">Select a rating</div>
+    </div>
+    <div class="fg">
+      <label>Comment (optional)</label>
+      <textarea class="fc" id="ratingComment" rows="3" placeholder="How was your experience? Was the issue resolved to your satisfaction?"></textarea>
+    </div>
+  </div>
+  <div class="modal-ft">
+    <button class="btn btn-primary" style="flex:1" onclick="submitRating()">Submit Feedback</button>
+    <button class="btn btn-outline" onclick="closeRatingModal()">Skip</button>
+  </div>
+</div>
 
 <!-- ═══════ SCRIPTS ═══════ -->
 <!-- Leaflet JS (global, loaded before the ES module) -->
