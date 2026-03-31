@@ -1268,13 +1268,11 @@ const DEPT_META = {
 const AV_COLORS = ['#1E6B6E','#1A4E8C','#B87A10','#1A6235','#8A4A2A','#5E62FA','#E85D24','#4A9E9F','#8B3A00','#156734'];
 
 const SEED_WORKERS = [
-  // Supervisors - Admin will see these in the dropdown
-  { id:'S001', name:'Arjun Singh',  role:'supervisor', department:'Electrical Dept', phone:'+91 98765 20001', experience:0, activeTasks:0 },
-  { id:'S002', name:'Priya Nair',   role:'supervisor', department:'Roads & Infra',   phone:'+91 98765 20002', experience:0, activeTasks:0 },
-  { id:'S003', name:'Suresh Babu',  role:'supervisor', department:'Water Supply',    phone:'+91 98765 20003', experience:0, activeTasks:0 },
-  { id:'S004', name:'Lakshmi Devi', role:'supervisor', department:'Sanitation',      phone:'+91 98765 20004', experience:0, activeTasks:0 },
+  { id:'S001', name:'Arjun Singh',  role:'supervisor', department:'Electrical Dept', experience:12, activeTasks:0, phone:'+91 98765 20001' },
+  { id:'S002', name:'Priya Nair',   role:'supervisor', department:'Roads & Infra',   experience:10, activeTasks:0, phone:'+91 98765 20002' },
+  { id:'S003', name:'Suresh Babu',  role:'supervisor', department:'Water Supply',    experience:15, activeTasks:0, phone:'+91 98765 20003' },
 
-  // Regular Workers - These will be HIDDEN from the Admin web page
+  // Regular Workers - keep as role: 'worker' to hide them from the Admin page
   { id:'W001', name:'Arjun Ramesh',  role:'worker', department:'Electrical Dept', experience:8, activeTasks:2 },
   { id:'W002', name:'Saranya Mohan', role:'worker', department:'Electrical Dept', experience:6, activeTasks:3 },
   { id:'W003', name:'Suresh Babu',     role:'worker', department:'Roads & Infra',   experience:12, activeTasks:1, phone:'+91 98765 10003' },
@@ -1483,24 +1481,26 @@ function renderWorkerStats() {
   const el = document.getElementById('workerStatsRow');
   if (!el) return;
 
-  const total    = workers.length;
-  const avgLoad  = workers.length ? (workers.reduce((s, w) => s + w.activeTasks, 0) / workers.length).toFixed(1) : 0;
-  const overload = workers.filter(w => w.activeTasks >= 6).length;
+  // Change: Count only supervisors
+  const supervisors = workers.filter(w => w.role === 'supervisor');
+  const total    = supervisors.length;
+  const avgLoad  = supervisors.length ? (supervisors.reduce((s, w) => s + w.activeTasks, 0) / supervisors.length).toFixed(1) : 0;
+  const overload = supervisors.filter(w => w.activeTasks >= 6).length;
 
   // Most loaded dept
   const deptLoad = {};
-  workers.forEach(w => { deptLoad[w.department] = (deptLoad[w.department] || 0) + w.activeTasks; });
+  supervisors.forEach(w => { deptLoad[w.department] = (deptLoad[w.department] || 0) + w.activeTasks; });
   const topDept = Object.entries(deptLoad).sort((a, b) => b[1] - a[1])[0];
 
   el.innerHTML = `
     <div class="scard">
       <div class="sc-top">
-        <div><div class="sc-num" style="color:var(--teal)">${total}</div><div class="sc-lbl">Total Workers</div></div>
+        <div><div class="sc-num" style="color:var(--teal)">${total}</div><div class="sc-lbl">Total Supervisors</div></div>
         <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)">
-          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
         </div>
       </div>
-      <div class="sc-note">Across all departments</div>
+      <div class="sc-note">Department Heads</div>
     </div>
     <div class="scard">
       <div class="sc-top">
@@ -1509,7 +1509,7 @@ function renderWorkerStats() {
           <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
       </div>
-      <div class="sc-note">Active tasks per worker</div>
+      <div class="sc-note">Active tasks per supervisor</div>
     </div>
     <div class="scard">
       <div class="sc-top">
@@ -1518,7 +1518,7 @@ function renderWorkerStats() {
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
       </div>
-      <div class="sc-note">Workers with 6+ tasks</div>
+      <div class="sc-note">Supervisors with 6+ tasks</div>
     </div>
     <div class="scard">
       <div class="sc-top">
@@ -1535,60 +1535,46 @@ function renderWorkerStats() {
 }
 
 function renderWorkerTable() {
-  const tbody    = document.getElementById('workersTbody');
-  const countEl  = document.getElementById('workerCount');
+  const tbody = document.getElementById('workersTbody');
+  const countEl = document.getElementById('workerCount');
   if (!tbody) return;
 
-  const dept     = document.getElementById('wfDept')?.value     || '';
-  const wl       = document.getElementById('wfWorkload')?.value || '';
-  const search   = (document.getElementById('wfSearch')?.value  || '').toLowerCase();
+  // Change: Filter the list to only include Supervisors
+  let list = workers.filter(w => w.role === 'supervisor');
 
-  let list = [...workers];
-  if (dept)   list = list.filter(w => w.department === dept);
-  if (wl === 'low')    list = list.filter(w => w.activeTasks <= 2);
-  if (wl === 'medium') list = list.filter(w => w.activeTasks >= 3 && w.activeTasks <= 5);
-  if (wl === 'high')   list = list.filter(w => w.activeTasks >= 6);
-  if (search) list = list.filter(w => w.name.toLowerCase().includes(search) || w.department.toLowerCase().includes(search));
+  // Apply your existing filters (Dept, Search, etc.) to this supervisor list
+  const dept = document.getElementById('wfDept')?.value || '';
+  const search = (document.getElementById('wfSearch')?.value || '').toLowerCase();
 
-  // Sort by activeTasks desc
-  list.sort((a, b) => b.activeTasks - a.activeTasks);
-
-  if (countEl) countEl.textContent = `${list.length} worker${list.length !== 1 ? 's' : ''}`;
+  if (dept) list = list.filter(w => w.department === dept);
+  if (search) list = list.filter(w => w.name.toLowerCase().includes(search));
 
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">No workers match filters</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">No supervisors found</td></tr>`;
     return;
   }
 
+  if (countEl) countEl.textContent = `${list.length} supervisor${list.length !== 1 ? 's' : ''}`;
+
   tbody.innerHTML = list.map((w, i) => {
-    const color   = workerAvColor(w.id);
-    const wlCls   = workloadClass(w.activeTasks);
-    const assigned = reports.filter(r => r.assignedWorkerId === w.id && !['resolved','closed'].includes(r.status));
     return `
       <tr>
         <td><span class="mono-id">${i + 1}</span></td>
         <td>
           <div class="worker-av-wrap">
-            <div class="worker-av" style="background:${color}">${workerInitials(w.name)}</div>
+            <div class="worker-av" style="background:${workerAvColor(w.id)}">${workerInitials(w.name)}</div>
             <div>
-              <div class="worker-name">${w.name}</div>
-              <div class="worker-meta">${w.id}${w.phone ? ' · ' + w.phone : ''}</div>
+              <div class="worker-name">${w.name} (Supervisor)</div>
+              <div class="worker-meta">${w.id} · ${w.phone || ''}</div>
             </div>
           </div>
         </td>
-        <td><span class="dept-tag ${deptClass(w.department)}">${deptIcon(w.department)} ${w.department}</span></td>
-        <td><span class="exp-stars">${expStars(w.experience)}</span></td>
-        <td><span style="font-family:var(--mono);font-weight:700;color:var(--text)">${w.activeTasks}</span>
-          ${assigned.length ? `<span style="font-size:10px;color:var(--text3);margin-left:4px">(${assigned.length} active)</span>` : ''}
-        </td>
+        <td><span class="dept-tag ${deptClass(w.department)}">${w.department}</span></td>
+        <td>${expStars(w.experience)}</td>
+        <td>${w.activeTasks}</td>
         <td>${workloadBarHtml(w.activeTasks)}</td>
         <td>${workloadLabel(w.activeTasks)}</td>
-        <td>
-          <div style="display:flex;gap:6px">
-            <button class="view-worker-btn" onclick="openWorkerDetail('${w.id}')">View →</button>
-            <button class="view-worker-btn" style="color:var(--red)" onclick="deleteWorker('${w.id}')">Remove</button>
-          </div>
-        </td>
+        <td><button class="view-worker-btn" onclick="openWorkerDetail('${w.id}')">Manage →</button></td>
       </tr>`;
   }).join('');
 }
@@ -1840,10 +1826,9 @@ window.exportWorkersCSV = function () {
 const _origOpenPanel = window.openPanel;
 window.openPanel = function (id) {
   _origOpenPanel(id);
-  // DISABLED: We no longer show individual workers to the Admin.
+  // DISABLE this line to hide individual workers from the Admin
   // setTimeout(() => injectWorkerAssignmentSection(id), 50);
-  // Keep the Proof of Execution sections visible for verification
-  setTimeout(() => injectPoESection(id), 80);
+  // Instead, ensure your new Supervisor assignment logic is there (see previous prompt)
 };
 
 function isAdminView() {
