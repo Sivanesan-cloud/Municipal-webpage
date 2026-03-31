@@ -35,6 +35,7 @@ const ROUTING = {
 
 const STATUS_FLOW = [
   'submitted',
+  'assigned',
   'acknowledged',
   'in_progress',
   'completed',
@@ -48,6 +49,7 @@ const POE_STATUSES = ['completed', 'verified'];
 
 const PIN_COLORS = {
   submitted:               '#E85D24',
+  assigned:                '#6B5BD6',
   acknowledged:            '#1E6B6E',
   in_progress:             '#B87A10',
   completed:               '#5E62FA',
@@ -68,6 +70,7 @@ const FIREBASE_CONFIG = {
 };
 
 const FIRESTORE_COLLECTION = 'reports';
+const USERS_COLLECTION = 'users';
 
 
 // ══════════════════════════════
@@ -177,6 +180,30 @@ function normalizeImages(data) {
     });
 }
 
+function isSupervisorUser(data) {
+  const role =
+    (data.role || data.userRole || data.type || '')
+      .toString()
+      .trim()
+      .toLowerCase();
+  if (role === 'supervisor') return true;
+  if (Array.isArray(data.roles)) {
+    return data.roles.map(r => r.toString().trim().toLowerCase()).includes('supervisor');
+  }
+  return false;
+}
+
+function userDisplayName(data, fallbackId) {
+  return (
+    data.name ||
+    data.displayName ||
+    data.fullName ||
+    data.email ||
+    data.username ||
+    fallbackId
+  );
+}
+
 // ══════════════════════════════
 //  STATE
 // ══════════════════════════════
@@ -186,12 +213,14 @@ let filtered    = [];
 let sortMode    = 'date';
 let db          = null;
 let fbUnsub     = null;
+let supervisorsUnsub = null;
 let leafletMap  = null;
 let mapMarkers  = [];
 let panelMap    = null;
 let selectedMapId = null;
 let mapRefreshTimer = null;
 let locationUiRefreshTimer = null;
+let supervisors = [];
 
 const locationNameCache = new Map();
 const locationNamePending = new Set();
@@ -327,6 +356,7 @@ async function connectFirebase() {
     db = getFirestore(app);
 
     if (fbUnsub) fbUnsub();
+    if (supervisorsUnsub) supervisorsUnsub();
 
     const q = query(collection(db, FIRESTORE_COLLECTION), orderBy('timestamp', 'desc'));
     fbUnsub = onSnapshot(
@@ -365,6 +395,7 @@ async function connectFirebase() {
             rating:          data.rating          || null,   // 1-5
             ratingComment:   data.ratingComment   || '',
             ratingAt:        data.ratingAt        || null,
+            supervisorId:    data.supervisorId    || '',
           };
         });
         reports  = live;
@@ -375,20 +406,44 @@ async function connectFirebase() {
         toast('Firestore connection error', 'err');
       }
     );
+
+    supervisorsUnsub = onSnapshot(
+      collection(db, USERS_COLLECTION),
+      (snap) => {
+        const list = snap.docs
+          .map(d => {
+            const data = d.data() || {};
+            return {
+              id: d.id,
+              name: userDisplayName(data, d.id),
+              role: (data.role || data.userRole || '').toString().toLowerCase(),
+              raw: data,
+            };
+          })
+          .filter(u => isSupervisorUser(u.raw))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        supervisors = list;
+      },
+      () => {
+        supervisors = [];
+      }
+    );
   } catch (e) {
     toast('Firebase config error', 'err');
   }
 }
 
-async function pushUpdate(id, status, assigned, note) {
+async function pushUpdate(id, status, assigned, note, supervisorId) {
   if (!db) return;
   try {
-    await updateDoc(doc(db, FIRESTORE_COLLECTION, id), {
+    const payload = {
       status,
       assigned,
       lastNote: note || '',
       updatedAt: new Date(),
-    });
+    };
+    if (supervisorId !== undefined) payload.supervisorId = supervisorId;
+    await updateDoc(doc(db, FIRESTORE_COLLECTION, id), payload);
   } catch (e) { /* silent */ }
 }
 
@@ -447,9 +502,9 @@ function renderDash() {
   document.getElementById('dashDate').textContent =
     new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  const activeCount   = reports.filter(r => ['submitted', 'in_progress'].includes(r.status)).length;
+  const activeCount   = reports.filter(r => ['submitted', 'assigned', 'in_progress'].includes(r.status)).length;
   const ackCount      = reports.filter(r => r.status === 'acknowledged').length;
-  const pendingCount  = reports.filter(r => ['submitted', 'acknowledged', 'in_progress'].includes(r.status)).length;
+  const pendingCount  = reports.filter(r => ['submitted', 'assigned', 'acknowledged', 'in_progress'].includes(r.status)).length;
   const resolvedCount = reports.filter(r => ['resolved', 'closed'].includes(r.status)).length;
 
   document.getElementById('statsRow').innerHTML = `
@@ -562,6 +617,7 @@ function rowHtml(r, short = false) {
 function badge(s) {
   const m = {
     submitted:              'b-submitted',
+    assigned:               'b-acknowledged',
     acknowledged:           'b-acknowledged',
     in_progress:            'b-inprog',
     completed:              'b-completed',
@@ -666,6 +722,12 @@ function renderStatusOverview() {
       match: r => r.status === 'submitted',
     },
     {
+      key: 'assigned',
+      label: 'assigned',
+      color: '#6B5BD6',
+      match: r => r.status === 'assigned',
+    },
+    {
       key: 'acknowledged',
       label: 'acknowledged',
       color: '#F29E02',
@@ -723,6 +785,7 @@ function renderStatusChart(elId) {
   const total  = reports.length || 1;
   const colors = {
     submitted:    '#E85D24',
+    assigned:     '#6B5BD6',
     acknowledged: '#1E6B6E',
     in_progress:  '#B87A10',
     resolved:     '#1A6235',
@@ -745,7 +808,7 @@ function renderStatusChart(elId) {
 
 function renderAnalytics() {
   const total    = reports.length;
-  const active   = reports.filter(r => ['submitted', 'in_progress'].includes(r.status)).length;
+  const active   = reports.filter(r => ['submitted', 'assigned', 'in_progress'].includes(r.status)).length;
   const ack      = reports.filter(r => r.status === 'acknowledged').length;
   const resolved = reports.filter(r => ['resolved', 'closed'].includes(r.status)).length;
 
@@ -893,10 +956,11 @@ window.openPanel = function (id) {
   const tl = [
     { what: 'Report submitted by citizen',    when: r.timestampDisplay || fmt(r.timestamp), state: 'done' },
     { what: 'Received by authority server',   when: '—', state: r.status !== 'saved_offline' ? 'done' : '' },
-    { what: 'Acknowledged by department',     when: '—', state: si >= 2 ? 'done' : si === 1 ? 'cur' : '' },
-    { what: 'Field team in progress',         when: '—', state: si >= 3 ? 'done' : si === 2 ? 'cur' : '' },
-    { what: 'Issue resolved',                 when: '—', state: si >= 4 ? 'done' : si === 3 ? 'cur' : '' },
-    { what: 'Closed',                         when: '—', state: si >= 5 ? 'done' : si === 4 ? 'cur' : '' },
+    { what: 'Assigned to supervisor',         when: '—', state: si >= 2 ? 'done' : si === 1 ? 'cur' : '' },
+    { what: 'Acknowledged by department',     when: '—', state: si >= 3 ? 'done' : si === 2 ? 'cur' : '' },
+    { what: 'Field team in progress',         when: '—', state: si >= 4 ? 'done' : si === 3 ? 'cur' : '' },
+    { what: 'Issue resolved',                 when: '—', state: si >= 5 ? 'done' : si === 4 ? 'cur' : '' },
+    { what: 'Closed',                         when: '—', state: si >= 6 ? 'done' : si === 5 ? 'cur' : '' },
   ];
 
   const imgHtml = r.images?.length
@@ -916,6 +980,7 @@ window.openPanel = function (id) {
   const pri        = getPriority(r.issueType, typeCounts);
   const priCt      = typeCounts[r.issueType] || 0;
   const related    = reports.filter(x => x.issueType === r.issueType && x.id !== r.id);
+  const supervisors = workers.filter(w => w.role === 'supervisor');
 
   document.getElementById('panelBody').innerHTML = `
     <div class="p-sec">
@@ -981,23 +1046,21 @@ window.openPanel = function (id) {
     </div>
 
     <div class="p-sec">
-      <div class="p-sec-lbl">Update Report</div>
+      <div class="p-sec-lbl">Department Assignment</div>
       <div class="fg">
-        <label>Status</label>
-        <select class="fc" id="upStatus">
-          ${STATUS_FLOW.map(s => `<option value="${s}"${s === r.status ? ' selected' : ''}>${s.replace(/_/g, ' ')}</option>`).join('')}
+        <label>Assign to Supervisor</label>
+        <select class="fc" id="upSupervisor">
+          <option value="">-- Select Dept Supervisor --</option>
+          ${supervisors.map(s => `
+            <option value="${s.id}" ${r.supervisorId === s.id ? 'selected' : ''}>
+              ${s.name} (${s.department})
+            </option>
+          `).join('')}
         </select>
       </div>
       <div class="fg">
-        <label>Assign To</label>
-        <select class="fc" id="upDept">
-          <option value="Unassigned"${r.assigned === 'Unassigned' ? ' selected' : ''}>Unassigned</option>
-          ${Object.values(ROUTING).filter((v, i, a) => a.indexOf(v) === i).map(d => `<option${r.assigned === d ? ' selected' : ''}>${d}</option>`).join('')}
-        </select>
-      </div>
-      <div class="fg">
-        <label>Note</label>
-        <textarea class="fc" rows="2" id="upNote" placeholder="Field team dispatched, resolution in 48hrs…"></textarea>
+        <label>Admin Instructions</label>
+        <textarea class="fc" rows="2" id="upNote" placeholder="Instructions for the department supervisor..."></textarea>
       </div>
     </div>
 
@@ -1041,15 +1104,32 @@ window.closePanel = function () {
 window.saveUpdate = async function (id) {
   const r = reports.find(x => x.id === id);
   if (!r) return;
-  const status   = document.getElementById('upStatus').value;
-  const assigned = document.getElementById('upDept').value;
-  const note     = document.getElementById('upNote').value;
-  r.status   = status;
-  r.assigned = assigned;
-  await pushUpdate(id, status, assigned, note);
-  closePanel();
-  refreshAll();
-  toast(`${id} updated → "${status.replace(/_/g, ' ')}"`, 'ok');
+
+  const supervisorId = document.getElementById('upSupervisor').value;
+  const supervisor = workers.find(w => w.id === supervisorId);
+  const note = document.getElementById('upNote').value;
+
+  if (!supervisorId) {
+    toast('Please select a supervisor', 'err');
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, FIRESTORE_COLLECTION, id), {
+      status: 'assigned', // Status moves to Assigned per the workflow
+      supervisorId: supervisorId,
+      supervisorName: supervisor.name,
+      assigned: supervisor.department,
+      adminNote: note || '',
+      updatedAt: new Date()
+    });
+
+    closePanel();
+    refreshAll();
+    toast(`Issue assigned to Supervisor ${supervisor.name}`, 'ok');
+  } catch (e) {
+    toast('Update failed', 'err');
+  }
 };
 
 
@@ -1188,21 +1268,28 @@ const DEPT_META = {
 const AV_COLORS = ['#1E6B6E','#1A4E8C','#B87A10','#1A6235','#8A4A2A','#5E62FA','#E85D24','#4A9E9F','#8B3A00','#156734'];
 
 const SEED_WORKERS = [
-  { id:'W001', name:'Arjun Ramesh',    department:'Electrical Dept', experience:8,  activeTasks:2, phone:'+91 98765 10001' },
-  { id:'W002', name:'Priya Nair',      department:'Electrical Dept', experience:5,  activeTasks:4, phone:'+91 98765 10002' },
-  { id:'W003', name:'Suresh Babu',     department:'Roads & Infra',   experience:12, activeTasks:1, phone:'+91 98765 10003' },
-  { id:'W004', name:'Kavitha Menon',   department:'Roads & Infra',   experience:7,  activeTasks:5, phone:'+91 98765 10004' },
-  { id:'W005', name:'Rajan Pillai',    department:'Water Supply',    experience:10, activeTasks:3, phone:'+91 98765 10005' },
-  { id:'W006', name:'Meena Krishnan',  department:'Water Supply',    experience:4,  activeTasks:6, phone:'+91 98765 10006' },
-  { id:'W007', name:'Dinesh Kumar',    department:'Sanitation',      experience:6,  activeTasks:2, phone:'+91 98765 10007' },
-  { id:'W008', name:'Lakshmi Devi',    department:'Sanitation',      experience:9,  activeTasks:0, phone:'+91 98765 10008' },
-  { id:'W009', name:'Venkat Rao',      department:'Sanitation',      experience:3,  activeTasks:7, phone:'+91 98765 10009' },
-  { id:'W010', name:'Anitha Selvi',    department:'Parks & Env.',    experience:5,  activeTasks:1, phone:'+91 98765 10010' },
-  { id:'W011', name:'Murugan Swamy',   department:'Parks & Env.',    experience:11, activeTasks:3, phone:'+91 98765 10011' },
-  { id:'W012', name:'Thenmozhi R.',    department:'General Admin',   experience:7,  activeTasks:2, phone:'+91 98765 10012' },
-  { id:'W013', name:'Balu Pandian',    department:'Roads & Infra',   experience:2,  activeTasks:0, phone:'+91 98765 10013' },
-  { id:'W014', name:'Saranya Mohan',   department:'Electrical Dept', experience:6,  activeTasks:3, phone:'+91 98765 10014' },
-  { id:'W015', name:'Gopal Krishnan',  department:'Water Supply',    experience:14, activeTasks:1, phone:'+91 98765 10015' },
+  // Supervisors - Admin will see these in the dropdown
+  { id:'S001', name:'Arjun Singh',  role:'supervisor', department:'Electrical Dept', phone:'+91 98765 20001', experience:0, activeTasks:0 },
+  { id:'S002', name:'Priya Nair',   role:'supervisor', department:'Roads & Infra',   phone:'+91 98765 20002', experience:0, activeTasks:0 },
+  { id:'S003', name:'Suresh Babu',  role:'supervisor', department:'Water Supply',    phone:'+91 98765 20003', experience:0, activeTasks:0 },
+  { id:'S004', name:'Lakshmi Devi', role:'supervisor', department:'Sanitation',      phone:'+91 98765 20004', experience:0, activeTasks:0 },
+
+  // Regular Workers - These will be HIDDEN from the Admin web page
+  { id:'W001', name:'Arjun Ramesh',  role:'worker', department:'Electrical Dept', experience:8, activeTasks:2 },
+  { id:'W002', name:'Saranya Mohan', role:'worker', department:'Electrical Dept', experience:6, activeTasks:3 },
+  { id:'W003', name:'Suresh Babu',     role:'worker', department:'Roads & Infra',   experience:12, activeTasks:1, phone:'+91 98765 10003' },
+  { id:'W004', name:'Kavitha Menon',   role:'worker', department:'Roads & Infra',   experience:7,  activeTasks:5, phone:'+91 98765 10004' },
+  { id:'W005', name:'Rajan Pillai',    role:'worker', department:'Water Supply',    experience:10, activeTasks:3, phone:'+91 98765 10005' },
+  { id:'W006', name:'Meena Krishnan',  role:'worker', department:'Water Supply',    experience:4,  activeTasks:6, phone:'+91 98765 10006' },
+  { id:'W007', name:'Dinesh Kumar',    role:'worker', department:'Sanitation',      experience:6,  activeTasks:2, phone:'+91 98765 10007' },
+  { id:'W008', name:'Lakshmi Devi',    role:'worker', department:'Sanitation',      experience:9,  activeTasks:0, phone:'+91 98765 10008' },
+  { id:'W009', name:'Venkat Rao',      role:'worker', department:'Sanitation',      experience:3,  activeTasks:7, phone:'+91 98765 10009' },
+  { id:'W010', name:'Anitha Selvi',    role:'worker', department:'Parks & Env.',    experience:5,  activeTasks:1, phone:'+91 98765 10010' },
+  { id:'W011', name:'Murugan Swamy',   role:'worker', department:'Parks & Env.',    experience:11, activeTasks:3, phone:'+91 98765 10011' },
+  { id:'W012', name:'Thenmozhi R.',    role:'worker', department:'General Admin',   experience:7,  activeTasks:2, phone:'+91 98765 10012' },
+  { id:'W013', name:'Balu Pandian',    role:'worker', department:'Roads & Infra',   experience:2,  activeTasks:0, phone:'+91 98765 10013' },
+  { id:'W014', name:'Saranya Mohan',   role:'worker', department:'Electrical Dept', experience:6,  activeTasks:3, phone:'+91 98765 10014' },
+  { id:'W015', name:'Gopal Krishnan',  role:'worker', department:'Water Supply',    experience:14, activeTasks:1, phone:'+91 98765 10015' },
 ];
 
 // ─── Load / seed workers ───────────────────────────────
@@ -1753,11 +1840,24 @@ window.exportWorkersCSV = function () {
 const _origOpenPanel = window.openPanel;
 window.openPanel = function (id) {
   _origOpenPanel(id);
-  // Inject assignment section after the "Update Report" form section
-  setTimeout(() => injectWorkerAssignmentSection(id), 50);
+  // DISABLED: We no longer show individual workers to the Admin.
+  // setTimeout(() => injectWorkerAssignmentSection(id), 50);
+  // Keep the Proof of Execution sections visible for verification
+  setTimeout(() => injectPoESection(id), 80);
 };
 
+function isAdminView() {
+  return (
+    document.body?.dataset?.view === 'admin' ||
+    document.body?.dataset?.role === 'admin' ||
+    document.body?.classList?.contains('admin-view') ||
+    window.currentView === 'admin' ||
+    window.CURRENT_VIEW === 'admin'
+  );
+}
+
 function injectWorkerAssignmentSection(issueId) {
+  if (isAdminView()) return;
   const r = reports.find(x => x.id === issueId);
   if (!r) return;
 
