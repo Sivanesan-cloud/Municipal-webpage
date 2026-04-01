@@ -1295,7 +1295,22 @@ const SEED_WORKERS = [
 function loadWorkers() {
   try {
     const raw = localStorage.getItem(WORKER_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Backfill roles and ensure supervisors exist in storage
+      if (Array.isArray(parsed)) {
+        const withRoles = parsed.map(w => ({ role: w.role || 'worker', ...w }));
+        const hasSupervisor = withRoles.some(w => w.role === 'supervisor');
+        if (!hasSupervisor) {
+          const supervisors = SEED_WORKERS.filter(w => w.role === 'supervisor');
+          const merged = [...supervisors, ...withRoles];
+          saveWorkers(merged);
+          return merged;
+        }
+        return withRoles;
+      }
+      return parsed;
+    }
   } catch (_) {}
   saveWorkers(SEED_WORKERS);
   return SEED_WORKERS.map(w => ({ ...w }));
