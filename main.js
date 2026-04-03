@@ -2253,12 +2253,17 @@ function statusFlowBarHtml(currentStatus) {
       const icon = done ? '✓' : (i + 1);
       return `
         <div class="sf-step">
-          <div class="sf-dot-wrap">
-            <div class="sf-dot ${cls}">${icon}</div>
-            <div class="sf-label ${cls}">${POE_FLOW_LABELS[i]}</div>
+          <div class="sf-marker">
+            <div class="sf-dot ${cls}"></div>
+            <div class="sf-line ${done ? 'done' : ''}"></div>
           </div>
-        </div>
-        ${i < POE_FLOW.length - 1 ? `<div class="sf-line ${done ? 'done' : ''}"></div>` : ''}`;
+          <div class="sf-dot-wrap">
+            <div class="sf-content">
+              <div class="sf-label ${cls}">${POE_FLOW_LABELS[i]}</div>
+              <div class="sf-meta">${done ? 'Completed' : cur ? 'Current stage' : 'Upcoming stage'}</div>
+            </div>
+          </div>
+        </div>`;
     }).join('') +
   `</div>`;
 }
@@ -2285,6 +2290,27 @@ function injectPoESection(issueId) {
 
   const poe = getPoe(issueId);
   const beforeUrl = r.images?.[0]?.url || null;
+  const siTimeline = STATUS_FLOW.indexOf(r.status);
+  const timelineHtml = `
+    <div class="poe-flow-card">
+      <div class="p-sec-lbl">Activity Timeline</div>
+      <div class="tl">
+        ${[
+          { what: 'Report submitted by citizen',    when: r.timestampDisplay || fmt(r.timestamp), state: 'done' },
+          { what: 'Received by authority server',   when: '—', state: r.status !== 'saved_offline' ? 'done' : '' },
+          { what: 'Assigned to supervisor',         when: '—', state: siTimeline >= 2 ? 'done' : siTimeline === 1 ? 'cur' : '' },
+          { what: 'Acknowledged by department',     when: '—', state: siTimeline >= 3 ? 'done' : siTimeline === 2 ? 'cur' : '' },
+          { what: 'Field team in progress',         when: '—', state: siTimeline >= 4 ? 'done' : siTimeline === 3 ? 'cur' : '' },
+          { what: 'Issue resolved',                 when: '—', state: siTimeline >= 5 ? 'done' : siTimeline === 4 ? 'cur' : '' },
+          { what: 'Closed',                         when: '—', state: siTimeline >= 6 ? 'done' : siTimeline === 5 ? 'cur' : '' },
+        ].map((t, idx) => `
+          <div class="tl-item ${t.state}">
+            <div class="tl-dot">${idx + 1}</div>
+            <div class="tl-when">${t.when}</div>
+            <div class="tl-what">${t.what}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
 
   const section = document.createElement('div');
   section.className = 'p-sec poe-inject';
@@ -2295,6 +2321,11 @@ function injectPoESection(issueId) {
   // Status flow bar always on top
   inner += `<div class="p-sec-lbl">📍 Status Flow</div>`;
   inner += statusFlowBarHtml(r.status);
+  inner = `
+    <div class="poe-flow-layout">
+      <div class="poe-flow-card">${inner}</div>
+      ${timelineHtml}
+    </div>`;
 
   // ── Worker: In Progress → show upload proof button ───
   if (r.status === 'in_progress') {
@@ -2413,6 +2444,10 @@ function injectPoESection(issueId) {
   const last = secs[secs.length - 1];
   if (last) panelBody.insertBefore(section, last);
   else panelBody.appendChild(section);
+
+  [...panelBody.querySelectorAll('.p-sec')]
+    .filter(sec => sec !== section && sec.querySelector('.p-sec-lbl')?.textContent?.trim() === 'Activity Timeline')
+    .forEach(sec => sec.remove());
 }
 
 // ─── Open URL in lightbox ──────────────────────────────
