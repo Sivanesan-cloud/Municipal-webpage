@@ -217,6 +217,7 @@ let supervisorsUnsub = null;
 let leafletMap  = null;
 let mapMarkers  = [];
 let panelMap    = null;
+let currentPanelId = null;
 let selectedMapId = null;
 let mapRefreshTimer = null;
 let locationUiRefreshTimer = null;
@@ -226,6 +227,8 @@ const locationNameCache = new Map();
 const locationNamePending = new Set();
 const geocodeQueue = [];
 let geocodeRunning = false;
+const imageGpsCache = new Map();
+const imageGpsPending = new Set();
 
 const GEOCODE_DELAY_MS = 350;
 const GEOCODE_ZOOM = 18;
@@ -233,6 +236,12 @@ const GEOCODE_ZOOM = 18;
 
 function coordKey(lat, lon) {
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
+}
+
+function hasValidCoords(location) {
+  const lat = Number(location?.latitude);
+  const lon = Number(location?.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
 }
 
 function formatAddress(addr) {
@@ -288,6 +297,227 @@ async function fetchLocationName(lat, lon) {
   }
 }
 
+function dataUrlToUint8Array(dataUrl) {
+  const base64 = (dataUrl.split(',')[1] || '').trim();
+  if (!base64) return null;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function readExifValue(view, entryOffset, littleEndian, type, count, tiffStart) {
+  const typeSizes = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8 };
+  const totalSize = (typeSizes[type] || 0) * count;
+  if (!totalSize) return null;
+
+  const valueOffset = totalSize <= 4
+    ? entryOffset + 8
+    : tiffStart + view.getUint32(entryOffset + 8, littleEndian);
+
+  if (valueOffset + totalSize > view.byteLength) return null;
+
+  if (type === 2) {
+    let text = '';
+    for (let i = 0; i < count; i++) {
+      const code = view.getUint8(valueOffset + i);
+      if (code === 0) break;
+      text += String.fromCharCode(code);
+    }
+    return text;
+  }
+
+  if (type === 5) {
+    const values = [];
+    for (let i = 0; i < count; i++) {
+      const num = view.getUint32(valueOffset + i * 8, littleEndian);
+      const den = view.getUint32(valueOffset + i * 8 + 4, littleEndian);
+      values.push(den ? num / den : 0);
+    }
+    return values;
+  }
+
+  if (type === 3) {
+    const values = [];
+    for (let i = 0; i < count; i++) values.push(view.getUint16(valueOffset + i * 2, littleEndian));
+    return count === 1 ? values[0] : values;
+  }
+
+  if (type === 4) {
+    const values = [];
+    for (let i = 0; i < count; i++) values.push(view.getUint32(valueOffset + i * 4, littleEndian));
+    return count === 1 ? values[0] : values;
+  }
+
+  if (type === 1) {
+    const values = [];
+    for (let i = 0; i < count; i++) values.push(view.getUint8(valueOffset + i));
+    return count === 1 ? values[0] : values;
+  }
+
+  return null;
+}
+
+function dmsToDecimal(parts, ref) {
+  if (!Array.isArray(parts) || parts.length < 3) return null;
+  const decimal = (parts[0] || 0) + (parts[1] || 0) / 60 + (parts[2] || 0) / 3600;
+  return ['S', 'W'].includes(String(ref || '').toUpperCase()) ? -decimal : decimal;
+}
+
+function extractGpsFromExifBytes(bytes) {
+  if (!bytes || bytes.length < 4) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint16(0) !== 0xFFD8) return null;
+
+  let offset = 2;
+  while (offset + 4 < view.byteLength) {
+    const marker = view.getUint16(offset);
+    offset += 2;
+    if (marker === 0xFFDA || marker === 0xFFD9) break;
+
+    const segmentLength = view.getUint16(offset);
+    if (segmentLength < 2) break;
+
+    if (marker === 0xFFE1 && offset + 2 + segmentLength <= view.byteLength) {
+      const exifHeader = String.fromCharCode(
+        view.getUint8(offset + 2),
+        view.getUint8(offset + 3),
+        view.getUint8(offset + 4),
+        view.getUint8(offset + 5)
+      );
+      if (exifHeader === 'Exif') {
+        const tiffStart = offset + 8;
+        const littleEndian = view.getUint16(tiffStart) === 0x4949;
+        const ifd0Offset = view.getUint32(tiffStart + 4, littleEndian);
+        const ifd0Start = tiffStart + ifd0Offset;
+        const entryCount = view.getUint16(ifd0Start, littleEndian);
+        let gpsIfdStart = null;
+
+        for (let i = 0; i < entryCount; i++) {
+          const entryOffset = ifd0Start + 2 + i * 12;
+          const tag = view.getUint16(entryOffset, littleEndian);
+          if (tag === 0x8825) {
+            gpsIfdStart = tiffStart + view.getUint32(entryOffset + 8, littleEndian);
+            break;
+          }
+        }
+
+        if (!gpsIfdStart) return null;
+
+        const gpsEntryCount = view.getUint16(gpsIfdStart, littleEndian);
+        let latRef = null;
+        let latVals = null;
+        let lonRef = null;
+        let lonVals = null;
+
+        for (let i = 0; i < gpsEntryCount; i++) {
+          const entryOffset = gpsIfdStart + 2 + i * 12;
+          const tag = view.getUint16(entryOffset, littleEndian);
+          const type = view.getUint16(entryOffset + 2, littleEndian);
+          const count = view.getUint32(entryOffset + 4, littleEndian);
+          const value = readExifValue(view, entryOffset, littleEndian, type, count, tiffStart);
+          if (tag === 1) latRef = value;
+          if (tag === 2) latVals = value;
+          if (tag === 3) lonRef = value;
+          if (tag === 4) lonVals = value;
+        }
+
+        const latitude = dmsToDecimal(latVals, latRef);
+        const longitude = dmsToDecimal(lonVals, lonRef);
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          return { latitude, longitude };
+        }
+      }
+    }
+
+    offset += segmentLength;
+  }
+
+  return null;
+}
+
+async function loadImageBytes(img) {
+  if (img?.base64Data) {
+    return dataUrlToUint8Array(`data:${img.mimeType || 'image/jpeg'};base64,${img.base64Data}`);
+  }
+  if (img?.url?.startsWith('data:')) return dataUrlToUint8Array(img.url);
+  if (img?.url) {
+    const res = await fetch(img.url);
+    if (!res.ok) return null;
+    return new Uint8Array(await res.arrayBuffer());
+  }
+  return null;
+}
+
+async function extractGpsFromImage(img) {
+  const key = img?.url || img?.fileName || img?.name || '';
+  if (!key) return null;
+  if (imageGpsCache.has(key)) return imageGpsCache.get(key);
+
+  const bytes = await loadImageBytes(img);
+  const coords = extractGpsFromExifBytes(bytes);
+  imageGpsCache.set(key, coords || null);
+  return coords || null;
+}
+
+async function enrichLocationFromImage(r) {
+  if (!r?.images?.length || hasValidCoords(r.location) || imageGpsPending.has(r.id)) return;
+  imageGpsPending.add(r.id);
+  try {
+    for (const img of r.images) {
+      const coords = await extractGpsFromImage(img);
+      if (!hasValidCoords(coords)) continue;
+      r.location = coords;
+      const name = await fetchLocationName(coords.latitude, coords.longitude);
+      if (name) r.locationName = name;
+      scheduleMapRefresh();
+      scheduleLocationUiRefresh();
+      break;
+    }
+  } catch (_) {
+    // If photo GPS is unavailable, keep the existing report location fallback.
+  } finally {
+    imageGpsPending.delete(r.id);
+  }
+}
+
+function syncOpenPanelLocation(issueId = currentPanelId) {
+  const panel = document.getElementById('panel');
+  const body = document.getElementById('panelBody');
+  if (!panel?.classList.contains('open') || !body || !issueId) return;
+
+  const r = reports.find(x => x.id === issueId);
+  if (!r) return;
+
+  const locationDisplay = r.locationName
+    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found');
+
+  body.querySelectorAll('.ic').forEach(card => {
+    const label = card.querySelector('label');
+    const value = card.querySelector('.v');
+    if (!label || !value) return;
+    if (label.textContent.trim().toLowerCase() === 'has location' || label.textContent.trim().toLowerCase() === 'location data') {
+      label.textContent = 'Location Data';
+      value.textContent = locationDisplay;
+    }
+  });
+
+  const chip = body.querySelector('.map-coords-chip');
+  if (chip) {
+    chip.textContent = r.locationName ? shortenLocationText(r.locationName) : 'Resolving exact address...';
+    chip.title = r.locationName || '';
+  }
+
+  const osmLink = body.querySelector('a[href*="openstreetmap.org"]');
+  if (osmLink) {
+    const locationText = osmLink.previousElementSibling;
+    if (locationText) {
+      locationText.textContent = r.locationName || 'Exact address is being resolved from GPS data.';
+      locationText.title = r.locationName || '';
+    }
+  }
+}
+
 function scheduleMapRefresh() {
   if (mapRefreshTimer) return;
   mapRefreshTimer = setTimeout(() => {
@@ -303,11 +533,12 @@ function scheduleLocationUiRefresh() {
     renderDash();
     applyFilters();
     if (leafletMap) renderMapList(reports);
+    syncOpenPanelLocation();
   }, 200);
 }
 
 function queueReverseGeocode(r) {
-  if (!r?.location || r.locationName) return;
+  if (!hasValidCoords(r?.location)) return;
   const key = coordKey(r.location.latitude, r.location.longitude);
   if (locationNameCache.has(key)) {
     r.locationName = locationNameCache.get(key);
@@ -386,6 +617,7 @@ async function connectFirebase() {
             status:          ['saved_offline', 'submitted_to_authority'].includes(data.status) ? 'submitted' : (data.status || 'submitted'),
             source:          data.source  || 'flutter_mobile_app',
             assigned:        data.assigned || ROUTING[data.issueType] || 'Unassigned',
+            supervisorName:  data.supervisorName || '',
             // Proof of Execution fields
             proofImageUrl:   data.proofImageUrl   || null,
             proofNote:       data.proofNote       || '',
@@ -464,7 +696,10 @@ window.nav = function (page) {
 };
 
 function refreshAll() {
-  reports.forEach(r => { if (r.location?.latitude && r.location?.longitude) queueReverseGeocode(r); });
+  reports.forEach(r => {
+    if (hasValidCoords(r.location)) queueReverseGeocode(r);
+    else enrichLocationFromImage(r);
+  });
   renderDash();
   applyFilters();
   renderAnalytics();
@@ -581,7 +816,7 @@ function rowHtml(r, short = false) {
   const loc   = r.location
     ? (r.locationName
       ? `<span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span>`
-      : `<span style="color:var(--text3);font-size:11px">Location name pending</span>`)
+      : `<span style="color:var(--text3);font-size:11px">Resolving exact address...</span>`)
     : `<span style="color:var(--text3);font-size:11px">No location provided</span>`;
   const imgs  = r.images?.length
     ? `<span style="font-family:var(--mono);font-size:11px;color:var(--teal);font-weight:600">📷 ${r.images.length}</span>`
@@ -949,6 +1184,7 @@ function highlightMapCard(id) {
 window.openPanel = function (id) {
   const r = reports.find(x => x.id === id);
   if (!r) return;
+  currentPanelId = id;
 
   document.getElementById('panelTitle').textContent = `${r.id} — ${r.issueType}`;
 
@@ -981,6 +1217,9 @@ window.openPanel = function (id) {
   const priCt      = typeCounts[r.issueType] || 0;
   const related    = reports.filter(x => x.issueType === r.issueType && x.id !== r.id);
   const supervisors = workers.filter(w => w.role === 'supervisor');
+  const assignedDisplay = r.supervisorName || r.assignedWorkerName || 'Unassigned';
+  const locationDisplay = r.locationName
+    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found');
 
   document.getElementById('panelBody').innerHTML = `
     <div class="p-sec">
@@ -989,20 +1228,31 @@ window.openPanel = function (id) {
         ${priHTML(pri, priCt)}
       </div>
       <div style="font-family:var(--head);font-size:15px;font-weight:700;color:var(--text);margin-bottom:7px">${r.issueType}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6">${r.description}</div>
+      <div style="font-family:var(--head);font-size:16px;font-weight:600;color:#08154F;line-height:1.75;letter-spacing:0.2px">${r.description}</div>
+    </div>
+
+    <div class="p-sec">
+      <div class="p-sec-lbl">Metadata</div>
+      <div class="ig">
+        <div class="ic"><label>Report ID</label><div class="v m">${r.id}</div></div>
+        <div class="ic"><label>Timestamp</label><div class="v">${r.timestampDisplay || fmt(r.timestamp)}</div></div>
+        <div class="ic"><label>Assigned</label><div class="v">${assignedDisplay}</div></div>
+        <div class="ic"><label>Images</label><div class="v">${r.images?.length || 0} / 4</div></div>
+        <div class="ic"><label>Has Location</label><div class="v">${r.location ? 'âœ“ GPS captured' : 'âœ— Not provided'}</div></div>
+      </div>
     </div>
 
     <div class="p-sec">
       <div class="p-sec-lbl">Priority Reason</div>
       <div class="cluster-box">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">
+        <div style="font-size:14px;color:#10223A;margin-bottom:10px;line-height:1.6;font-weight:600">
           <strong>${priCt}</strong> active report${priCt !== 1 ? 's' : ''} share the same issue type
-          <span style="font-style:italic;color:var(--text3)">"${r.issueType}"</span>
+          <span style="font-style:italic;color:#24384C">"${r.issueType}"</span>
           — priority is ${pri.toUpperCase()}.
         </div>
         ${priorityReasonBarHtml(priCt)}
         ${related.length ? `
-          <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px">Other same-type reports</div>
+          <div style="font-size:11px;font-weight:800;color:#24384C;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px">Other same-type reports</div>
           ${related.slice(0, 4).map(x => `
             <div class="cluster-row" onclick="openPanel('${x.id}')" style="cursor:pointer">
               <span class="mono-id">${x.id}</span>
@@ -1010,7 +1260,7 @@ window.openPanel = function (id) {
               ${badge(x.status)}
             </div>`).join('')}
           ${related.length > 4 ? `<div style="font-size:11px;color:var(--text3);padding-top:6px">+${related.length - 4} more same-type reports</div>` : ''}
-        ` : `<div style="font-size:12px;color:var(--text3)">No other reports of this type yet.</div>`}
+        ` : `<div style="font-size:13px;color:#24384C;font-weight:500">No other reports of this type yet.</div>`}
       </div>
     </div>
 
@@ -1018,11 +1268,10 @@ window.openPanel = function (id) {
       <div class="p-sec-lbl">Metadata</div>
       <div class="ig">
         <div class="ic"><label>Report ID</label><div class="v m">${r.id}</div></div>
-        <div class="ic"><label>Source</label><div class="v m" style="color:var(--teal)">${r.source || 'flutter_mobile_app'}</div></div>
         <div class="ic"><label>Timestamp</label><div class="v">${r.timestampDisplay || fmt(r.timestamp)}</div></div>
-        <div class="ic"><label>Assigned</label><div class="v">${r.assigned || 'Unassigned'}</div></div>
+        <div class="ic"><label>Assigned</label><div class="v">${assignedDisplay}</div></div>
         <div class="ic"><label>Images</label><div class="v">${r.images?.length || 0} / 4</div></div>
-        <div class="ic"><label>Has Location</label><div class="v">${r.location ? '✓ GPS captured' : '✗ Not provided'}</div></div>
+        <div class="ic"><label>Location Data</label><div class="v">${locationDisplay}</div></div>
       </div>
     </div>
 
@@ -1076,6 +1325,11 @@ window.openPanel = function (id) {
       </div>
     </div>`;
 
+  const panelBody = document.getElementById('panelBody');
+  const metadataSections = [...panelBody.querySelectorAll('.p-sec')]
+    .filter(sec => sec.querySelector('.p-sec-lbl')?.textContent?.trim() === 'Metadata');
+  metadataSections.slice(1).forEach(sec => sec.remove());
+
   document.getElementById('panelFt').innerHTML = `
     <button class="btn btn-primary" style="flex:1" onclick="saveUpdate('${r.id}')">Save Update</button>
     <button class="btn btn-outline" onclick="closePanel()">Cancel</button>`;
@@ -1096,6 +1350,7 @@ window.openPanel = function (id) {
 };
 
 window.closePanel = function () {
+  currentPanelId = null;
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('panel').classList.remove('open');
   if (panelMap) { setTimeout(() => { panelMap?.remove(); panelMap = null; }, 300); }
@@ -1841,6 +2096,7 @@ window.exportWorkersCSV = function () {
 const _origOpenPanel = window.openPanel;
 window.openPanel = function (id) {
   _origOpenPanel(id);
+  syncOpenPanelLocation(id);
   // DISABLE this line to hide individual workers from the Admin
   // setTimeout(() => injectWorkerAssignmentSection(id), 50);
   // Instead, ensure your new Supervisor assignment logic is there (see previous prompt)
@@ -2450,6 +2706,7 @@ window.submitRating = async function () {
 const _poeOrigOpenPanel = window.openPanel;
 window.openPanel = function (id) {
   _poeOrigOpenPanel(id);
+  syncOpenPanelLocation(id);
   setTimeout(() => injectPoESection(id), 80);
 };
 
