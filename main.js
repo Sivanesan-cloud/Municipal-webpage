@@ -115,10 +115,10 @@ function priorityReasonBarHtml(count) {
   const pCritical = (PRI_THRESHOLDS.critical / cap) * 100;
   const pCount = (Math.min(count, cap) / cap) * 100;
   const gradient = `linear-gradient(90deg,
-    #BFECCB 0% ${pMedium}%,
-    #FBE6A1 ${pMedium}% ${pHigh}%,
-    #F9C48E ${pHigh}% ${pCritical}%,
-    #F3A5A5 ${pCritical}% 100%)`;
+    #5AC97A 0% ${pMedium}%,
+    #F2C94C ${pMedium}% ${pHigh}%,
+    #F2994A ${pHigh}% ${pCritical}%,
+    #EB5757 ${pCritical}% 100%)`;
 
   return `
     <div class="pri-bar">
@@ -743,30 +743,30 @@ function renderDash() {
   const resolvedCount = reports.filter(r => ['resolved', 'closed'].includes(r.status)).length;
 
   document.getElementById('statsRow').innerHTML = `
-    <div class="scard">
+    <div class="scard scard-active">
       <div class="sc-top">
-        <div><div class="sc-num" id="dash-active">0</div><div class="sc-lbl">Active Cases</div></div>
+        <div><div class="sc-kicker">Live Overview</div><div class="sc-num" id="dash-active">0</div><div class="sc-lbl">Active Cases</div></div>
         <div class="sc-icon" style="background:var(--blue-lt);color:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 7h10l2 2h4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/></svg></div>
       </div>
       <div class="sc-note">Submitted &amp; In Progress</div>
     </div>
-    <div class="scard">
+    <div class="scard scard-ack">
       <div class="sc-top">
-        <div><div class="sc-num" id="dash-ack" style="color:var(--teal)">0</div><div class="sc-lbl">Acknowledged</div></div>
+        <div><div class="sc-kicker">Department Pulse</div><div class="sc-num" id="dash-ack" style="color:var(--teal)">0</div><div class="sc-lbl">Acknowledged</div></div>
         <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)"><svg viewBox="0 0 24 24"><path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/></svg></div>
       </div>
       <div class="sc-note">Checked by Authority</div>
     </div>
-    <div class="scard">
+    <div class="scard scard-pending">
       <div class="sc-top">
-        <div><div class="sc-num" id="dash-pending" style="color:var(--amber)">0</div><div class="sc-lbl">Pending Reports</div></div>
+        <div><div class="sc-kicker">Queue Status</div><div class="sc-num" id="dash-pending" style="color:var(--amber)">0</div><div class="sc-lbl">Pending Reports</div></div>
         <div class="sc-icon" style="background:var(--amber-lt);color:var(--amber)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
       </div>
       <div class="sc-note">In workflow pipeline</div>
     </div>
-    <div class="scard">
+    <div class="scard scard-resolved">
       <div class="sc-top">
-        <div><div class="sc-num" id="dash-resolved" style="color:var(--green)">0</div><div class="sc-lbl">Resolved</div></div>
+        <div><div class="sc-kicker">Closure Rate</div><div class="sc-num" id="dash-resolved" style="color:var(--green)">0</div><div class="sc-lbl">Resolved</div></div>
         <div class="sc-icon" style="background:var(--green-lt);color:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/><polyline points="8.5 12.5 11 15 16 9"/></svg></div>
       </div>
       <div class="sc-note">Completed &amp; Closed</div>
@@ -1282,7 +1282,7 @@ window.openPanel = function (id) {
           <div id="panelMap"></div>
           <div class="map-coords-chip" title="${r.locationName || ''}">${r.locationName ? shortenLocationText(r.locationName) : "Location name pending"}</div>
         </div>
-        ${r.locationName ? `<div style="font-size:12px;color:var(--text2);margin-top:6px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
+        ${r.locationName ? `<div style="font-size:14px;color:#1B3558;font-weight:600;margin-top:8px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
         <a href="https://www.openstreetmap.org/?mlat=${r.location.latitude}&mlon=${r.location.longitude}&zoom=17" target="_blank"
            style="font-size:11px;color:var(--teal);text-decoration:none;display:inline-block;margin-top:5px">Open in OpenStreetMap ↗</a>`
       : `<div style="background:var(--bg);border-radius:8px;padding:12px;font-size:12px;color:var(--text3)">
