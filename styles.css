@@ -453,10 +453,11 @@ html, body {
 
 .dash-top-container {
   display: grid;
-  grid-template-columns: 1fr 250px;
-  gap: 13px;
-  margin-bottom: 16px;
-  padding: 16px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px;
   border: 1px solid rgba(16, 34, 58, 0.08);
   border-radius: 18px;
   background:
@@ -468,9 +469,10 @@ html, body {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 13px;
-  padding: 2px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-self: start;
+  gap: 9px;
+  padding: 0;
   border-radius: 16px;
 }
 
@@ -485,8 +487,8 @@ html, body {
     linear-gradient(155deg, #F8FCFC 0%, #EDF6F6 55%, #E6F0F2 100%);
   border-radius: var(--r-lg);
   border: 1px solid rgba(16, 34, 58, 0.08);
-  box-shadow: 0 18px 34px rgba(16, 34, 58, 0.1);
-  padding: 18px 16px 16px;
+  box-shadow: 0 14px 28px rgba(16, 34, 58, 0.1);
+  padding: 14px 14px 12px;
   backdrop-filter: blur(10px);
 }
 
@@ -508,20 +510,20 @@ html, body {
   font-weight: 700;
   color: #0B1A66;
   align-self: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .sd-chart-wrapper {
   display: flex;
   justify-content: center;
   width: 100%;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .sd-donut-container {
   position: relative;
-  width: 172px;
-  height: 172px;
+  width: 146px;
+  height: 146px;
   display: grid;
   place-items: center;
   isolation: isolate;
@@ -575,7 +577,7 @@ html, body {
 .sd-donut::before {
   content: '';
   position: absolute;
-  inset: 36px;
+  inset: 30px;
   background: linear-gradient(180deg, #FFFFFF, #F4F8F9);
   border-radius: 50%;
   border: 1px solid rgba(16, 34, 58, 0.06);
@@ -599,7 +601,7 @@ html, body {
 .sd-legend {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px 10px;
+  gap: 7px 8px;
   width: 100%;
 }
 
@@ -612,7 +614,7 @@ html, body {
   background: rgba(255,255,255,0.68);
   border: 1px solid rgba(16, 34, 58, 0.06);
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
 
@@ -642,13 +644,14 @@ html, body {
 
 .scard {
   position: relative;
+  align-self: start;
   overflow: hidden;
   background: linear-gradient(165deg, rgba(255,255,255,0.95), rgba(242,247,248,0.88));
   border: 1px solid rgba(16, 34, 58, 0.08);
   border-radius: var(--r-lg);
-  padding: 18px 18px 16px;
+  padding: 14px 14px 12px;
   backdrop-filter: blur(10px);
-  box-shadow: 0 14px 30px rgba(16, 34, 58, 0.08);
+  box-shadow: 0 10px 22px rgba(16, 34, 58, 0.08);
   transition: box-shadow .16s, transform .16s, border-color .16s, background .16s;
 }
 
@@ -685,8 +688,8 @@ html, body {
 .scard::before {
   content: '';
   position: absolute;
-  left: 18px;
-  right: 18px;
+  left: 14px;
+  right: 14px;
   top: 0;
   height: 4px;
   border-radius: 0 0 999px 999px;
@@ -697,8 +700,8 @@ html, body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 10px;
-  gap: 12px;
+  margin-bottom: 8px;
+  gap: 10px;
 }
 
 .sc-icon {
@@ -1705,6 +1708,55 @@ tbody td { font-size: 12px; }
 .unassigned-info { flex: 1; min-width: 0; }
 .unassigned-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
 .unassigned-meta  { font-size: 11px; color: var(--text3); }
+
+.worker-view-hidden {
+  display: none;
+}
+
+.worker-form-view {
+  display: none;
+  animation: tIn .2s ease;
+}
+
+.worker-form-view.open {
+  display: block;
+}
+
+.worker-form-head {
+  margin-bottom: 16px;
+}
+
+.worker-back-btn {
+  margin-bottom: 14px;
+}
+
+.worker-back-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.worker-form-card {
+  padding: 22px;
+}
+
+.worker-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.worker-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 6px;
+}
 
 /* ── MODAL ── */
 .modal-backdrop {

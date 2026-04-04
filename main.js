@@ -1521,11 +1521,12 @@ const DEPT_META = {
 };
 
 const AV_COLORS = ['#1E6B6E','#1A4E8C','#B87A10','#1A6235','#8A4A2A','#5E62FA','#E85D24','#4A9E9F','#8B3A00','#156734'];
+const SUPERVISOR_ROLE_OPTIONS = ['Sanitary Inspector', 'Assistant Engineer', 'Junior Engineer'];
 
 const SEED_WORKERS = [
-  { id:'S001', name:'Arjun Singh',  role:'supervisor', department:'Electrical Dept', experience:12, activeTasks:0, phone:'+91 98765 20001' },
-  { id:'S002', name:'Priya Nair',   role:'supervisor', department:'Roads & Infra',   experience:10, activeTasks:0, phone:'+91 98765 20002' },
-  { id:'S003', name:'Suresh Babu',  role:'supervisor', department:'Water Supply',    experience:15, activeTasks:0, phone:'+91 98765 20003' },
+  { id:'S001', name:'Arjun Singh',  role:'supervisor', designation:'Assistant Engineer', department:'Electrical Dept', experience:12, activeTasks:0, phone:'+91 98765 20001' },
+  { id:'S002', name:'Priya Nair',   role:'supervisor', designation:'Junior Engineer', department:'Roads & Infra',   experience:10, activeTasks:0, phone:'+91 98765 20002' },
+  { id:'S003', name:'Suresh Babu',  role:'supervisor', designation:'Sanitary Inspector', department:'Water Supply',    experience:15, activeTasks:0, phone:'+91 98765 20003' },
 
   // Regular Workers - keep as role: 'worker' to hide them from the Admin page
   { id:'W001', name:'Arjun Ramesh',  role:'worker', department:'Electrical Dept', experience:8, activeTasks:2 },
@@ -1554,7 +1555,7 @@ function loadWorkers() {
       const parsed = JSON.parse(raw);
       // Backfill roles and ensure supervisors exist in storage
       if (Array.isArray(parsed)) {
-        const withRoles = parsed.map(w => ({ role: w.role || 'worker', ...w }));
+        const withRoles = parsed.map(w => normalizeWorkerRecord({ role: w.role || 'worker', ...w }));
         const hasSupervisor = withRoles.some(w => w.role === 'supervisor');
         if (!hasSupervisor) {
           const supervisors = SEED_WORKERS.filter(w => w.role === 'supervisor');
@@ -1568,11 +1569,11 @@ function loadWorkers() {
     }
   } catch (_) {}
   saveWorkers(SEED_WORKERS);
-  return SEED_WORKERS.map(w => ({ ...w }));
+  return SEED_WORKERS.map(w => normalizeWorkerRecord({ ...w }));
 }
 
 function saveWorkers(ws) {
-  try { localStorage.setItem(WORKER_STORAGE_KEY, JSON.stringify(ws)); } catch (_) {}
+  try { localStorage.setItem(WORKER_STORAGE_KEY, JSON.stringify(ws.map(normalizeWorkerRecord))); } catch (_) {}
 }
 
 let workers = loadWorkers();
@@ -1621,6 +1622,19 @@ function workloadBarHtml(n) {
       <div class="wl-bar-track"><div class="wl-bar-fill" style="width:${pct}%"></div></div>
       <div class="wl-count">${n}</div>
     </div>`;
+}
+
+function normalizeWorkerRecord(worker) {
+  const normalized = { ...worker };
+  if (!normalized.role) normalized.role = 'worker';
+  if (normalized.role === 'supervisor') {
+    normalized.designation = normalized.designation || normalized.title || SUPERVISOR_ROLE_OPTIONS[0];
+  }
+  return normalized;
+}
+
+function supervisorDesignation(worker) {
+  return worker.designation || SUPERVISOR_ROLE_OPTIONS[0];
 }
 
 // ─── Smart Assignment Suggestion ──────────────────────
@@ -1765,7 +1779,7 @@ function renderWorkerStats() {
   el.innerHTML = `
     <div class="scard">
       <div class="sc-top">
-        <div><div class="sc-num" style="color:var(--teal)">${total}</div><div class="sc-lbl">Total Supervisors</div></div>
+        <div><div class="sc-num" style="color:var(--teal)">${total}</div><div class="sc-lbl">Total Officials</div></div>
         <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)">
           <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
         </div>
@@ -1779,7 +1793,7 @@ function renderWorkerStats() {
           <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
       </div>
-      <div class="sc-note">Active tasks per supervisor</div>
+      <div class="sc-note">Active tasks per official</div>
     </div>
     <div class="scard">
       <div class="sc-top">
@@ -1788,7 +1802,7 @@ function renderWorkerStats() {
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
       </div>
-      <div class="sc-note">Supervisors with 6+ tasks</div>
+      <div class="sc-note">Officials with 6+ tasks</div>
     </div>
     <div class="scard">
       <div class="sc-top">
@@ -1820,11 +1834,11 @@ function renderWorkerTable() {
   if (search) list = list.filter(w => w.name.toLowerCase().includes(search));
 
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">No supervisors found</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text3)">No officials found</td></tr>`;
     return;
   }
 
-  if (countEl) countEl.textContent = `${list.length} supervisor${list.length !== 1 ? 's' : ''}`;
+  if (countEl) countEl.textContent = `${list.length} official${list.length !== 1 ? 's' : ''}`;
 
   tbody.innerHTML = list.map((w, i) => {
     return `
@@ -1834,12 +1848,13 @@ function renderWorkerTable() {
           <div class="worker-av-wrap">
             <div class="worker-av" style="background:${workerAvColor(w.id)}">${workerInitials(w.name)}</div>
             <div>
-              <div class="worker-name">${w.name} (Supervisor)</div>
-              <div class="worker-meta">${w.id} · ${w.phone || ''}</div>
+              <div class="worker-name">${w.name} (Official)</div>
+              <div class="worker-meta">${w.id} · ${supervisorDesignation(w)}${w.phone ? ` · ${w.phone}` : ''}</div>
             </div>
           </div>
         </td>
         <td><span class="dept-tag ${deptClass(w.department)}">${w.department}</span></td>
+        <td>${supervisorDesignation(w)}</td>
         <td>${expStars(w.experience)}</td>
         <td>${w.activeTasks}</td>
         <td>${workloadBarHtml(w.activeTasks)}</td>
@@ -1917,6 +1932,7 @@ window.openWorkerDetail = function (workerId) {
         <div style="margin-top:4px">
           <span class="dept-tag ${deptClass(w.department)}">${deptIcon(w.department)} ${w.department}</span>
         </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:6px">${supervisorDesignation(w)}</div>
       </div>
       <div style="margin-left:auto;text-align:right">
         ${workloadLabel(w.activeTasks)}
@@ -1925,7 +1941,8 @@ window.openWorkerDetail = function (workerId) {
     </div>
 
     <div class="ig" style="margin-bottom:18px">
-      <div class="ic"><label>Worker ID</label><div class="v m">${w.id}</div></div>
+      <div class="ic"><label>Official ID</label><div class="v m">${w.id}</div></div>
+      <div class="ic"><label>Role</label><div class="v">${supervisorDesignation(w)}</div></div>
       <div class="ic"><label>Experience</label><div class="v"><span class="exp-stars">${expStars(w.experience)}</span></div></div>
       <div class="ic"><label>Phone</label><div class="v">${w.phone || '—'}</div></div>
       <div class="ic"><label>Tasks Completed</label><div class="v" style="color:var(--green)">${done.length}</div></div>
@@ -1960,7 +1977,7 @@ window.openWorkerDetail = function (workerId) {
 
   document.getElementById('workerDetailFt').innerHTML = `
     <button class="btn btn-outline" onclick="openEditWorkerModal('${w.id}')">✏️ Edit</button>
-    <button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="deleteWorker('${w.id}');closeWorkerDetailModal()">Remove Worker</button>
+    <button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="deleteWorker('${w.id}');closeWorkerDetailModal()">Remove Official</button>
     <button class="btn btn-outline" style="margin-left:auto" onclick="closeWorkerDetailModal()">Close</button>`;
 
   document.getElementById('workerDetailBackdrop').classList.add('open');
@@ -1978,13 +1995,14 @@ let editingWorkerId = null;
 
 window.openAddWorkerModal = function () {
   editingWorkerId = null;
-  document.getElementById('modalTitle').textContent = 'Add New Supervisor';
-  document.getElementById('saveWorkerBtn').textContent = 'Save Worker';
+  document.getElementById('modalTitle').textContent = 'Add New Official';
+  document.getElementById('saveWorkerBtn').textContent = 'Save Official';
   ['wName','wEmpId','wPhone'].forEach(id => (document.getElementById(id).value = ''));
   document.getElementById('wDept').value = '';
+  document.getElementById('wRole').value = '';
   document.getElementById('wExp').value  = '';
-  document.getElementById('addWorkerBackdrop').classList.add('open');
-  document.getElementById('addWorkerModal').classList.add('open');
+  document.getElementById('workersListView').classList.add('worker-view-hidden');
+  document.getElementById('workerFormView').classList.add('open');
   setTimeout(() => document.getElementById('wName').focus(), 200);
 };
 
@@ -1992,40 +2010,44 @@ window.openEditWorkerModal = function (workerId) {
   const w = workers.find(x => x.id === workerId);
   if (!w) return;
   editingWorkerId = workerId;
-  document.getElementById('modalTitle').textContent = 'Edit Worker';
-  document.getElementById('saveWorkerBtn').textContent = 'Update Worker';
+  document.getElementById('modalTitle').textContent = 'Edit Official';
+  document.getElementById('saveWorkerBtn').textContent = 'Update Official';
   document.getElementById('wName').value  = w.name;
   document.getElementById('wDept').value  = w.department;
+  document.getElementById('wRole').value  = supervisorDesignation(w);
   document.getElementById('wExp').value   = w.experience;
   document.getElementById('wEmpId').value = w.id;
   document.getElementById('wPhone').value = w.phone || '';
   closeWorkerDetailModal();
-  document.getElementById('addWorkerBackdrop').classList.add('open');
-  document.getElementById('addWorkerModal').classList.add('open');
+  document.getElementById('workersListView').classList.add('worker-view-hidden');
+  document.getElementById('workerFormView').classList.add('open');
   setTimeout(() => document.getElementById('wName').focus(), 200);
 };
 
 window.closeAddWorkerModal = function () {
-  document.getElementById('addWorkerBackdrop').classList.remove('open');
-  document.getElementById('addWorkerModal').classList.remove('open');
+  document.getElementById('workersListView').classList.remove('worker-view-hidden');
+  document.getElementById('workerFormView').classList.remove('open');
   editingWorkerId = null;
 };
 
 window.saveWorker = function () {
   const name = document.getElementById('wName').value.trim();
   const dept = document.getElementById('wDept').value;
+  const designation = document.getElementById('wRole').value;
   const exp  = parseInt(document.getElementById('wExp').value) || 0;
   const empId = document.getElementById('wEmpId').value.trim();
   const phone = document.getElementById('wPhone').value.trim();
 
-  if (!name) { toast('Worker name is required', 'err'); return; }
+  if (!name) { toast('Official name is required', 'err'); return; }
   if (!dept) { toast('Please select a department', 'err'); return; }
+  if (!designation) { toast('Please select a role', 'err'); return; }
 
   if (editingWorkerId) {
     const w = workers.find(x => x.id === editingWorkerId);
     if (w) {
       w.name       = name;
       w.department = dept;
+      w.designation = designation;
       w.experience = exp;
       w.phone      = phone;
       saveWorkers(workers);
@@ -2036,12 +2058,12 @@ window.saveWorker = function () {
     return;
   }
 
-  const newId = empId || ('W' + String(Date.now()).slice(-5));
+  const newId = empId || ('S' + String(Date.now()).slice(-5));
   if (workers.find(w => w.id === newId)) {
-    toast('Worker ID already exists', 'err'); return;
+    toast('Official ID already exists', 'err'); return;
   }
 
-  workers.push({ id: newId, name, department: dept, experience: exp, activeTasks: 0, phone });
+  workers.push(normalizeWorkerRecord({ id: newId, name, role: 'supervisor', designation, department: dept, experience: exp, activeTasks: 0, phone }));
   saveWorkers(workers);
   closeAddWorkerModal();
   renderWorkersPage();
@@ -2051,7 +2073,7 @@ window.saveWorker = function () {
 window.deleteWorker = function (workerId) {
   const w = workers.find(x => x.id === workerId);
   if (!w) return;
-  if (!confirm(`Remove worker "${w.name}" from the roster? Their active assignments will be unassigned.`)) return;
+  if (!confirm(`Remove official "${w.name}" from the roster? Their active assignments will be unassigned.`)) return;
 
   // Unassign their issues
   reports.forEach(r => {
@@ -2080,14 +2102,16 @@ window.clearWorkerFilters = function () {
 
 window.exportWorkersCSV = function () {
   const rows = [
-    ['ID','Name','Department','Experience (yrs)','Active Tasks','Phone'],
-    ...workers.map(w => [w.id, `"${w.name}"`, `"${w.department}"`, w.experience, w.activeTasks, w.phone || '']),
+    ['ID','Name','Department','Role','Experience (yrs)','Active Tasks','Phone'],
+    ...workers
+      .filter(w => w.role === 'supervisor')
+      .map(w => [w.id, `"${w.name}"`, `"${w.department}"`, `"${supervisorDesignation(w)}"`, w.experience, w.activeTasks, w.phone || '']),
   ];
   const a   = document.createElement('a');
   a.href    = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n'));
   a.download = `civic-workers-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
-  toast('Workers CSV exported', 'ok');
+  toast('Officials CSV exported', 'ok');
 };
 
 // ─── Panel enhancement: Worker Assignment Section ─────
