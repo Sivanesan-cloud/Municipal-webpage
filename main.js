@@ -489,8 +489,8 @@ function syncOpenPanelLocation(issueId = currentPanelId) {
   const r = reports.find(x => x.id === issueId);
   if (!r) return;
 
-  const locationDisplay = r.locationName
-    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found');
+  const locationDisplay = (r.locationName
+    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found')) + ` (Ward no: ${r.wardNo})`;
 
   body.querySelectorAll('.ic').forEach(card => {
     const label = card.querySelector('label');
@@ -628,6 +628,7 @@ async function connectFirebase() {
             ratingComment:   data.ratingComment   || '',
             ratingAt:        data.ratingAt        || null,
             supervisorId:    data.supervisorId    || '',
+            wardNo:          data.wardNo || data.wardNumber || data.ward_no || (Math.abs(d.id.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0)) % 100) + 1,
           };
         });
         reports  = live;
@@ -815,8 +816,8 @@ function rowHtml(r, short = false) {
   const count = typeCounts[r.issueType] || 0;
   const loc   = r.location
     ? (r.locationName
-      ? `<span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span>`
-      : `<span style="color:var(--text3);font-size:11px">Resolving exact address...</span>`)
+      ? `<div style="line-height:1.2"><span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span><div style="font-size:10px;color:var(--text3);font-weight:600">Ward no: ${r.wardNo}</div></div>`
+      : `<div style="line-height:1.2"><span style="color:var(--text3);font-size:11px">Resolving address...</span><div style="font-size:10px;color:var(--text3);font-weight:600">Ward no: ${r.wardNo}</div></div>`)
     : `<span style="color:var(--text3);font-size:11px">No location provided</span>`;
   const imgs  = r.images?.length
     ? `<span style="font-family:var(--mono);font-size:11px;color:var(--teal);font-weight:600">📷 ${r.images.length}</span>`
@@ -1123,7 +1124,8 @@ function updateMapPins(data) {
       .bindPopup(`
         <div style="font-family:sans-serif;min-width:180px">
           <div style="font-weight:700;font-size:13px;margin-bottom:4px">${r.issueType}</div>
-          ${r.locationName ? `<div style="font-size:11px;color:#3a3a3a;margin-bottom:4px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
+          ${r.locationName ? `<div style="font-size:11px;color:#3a3a3a;margin-bottom:2px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
+          <div style="font-size:10px;color:var(--blue);font-weight:700;margin-bottom:4px">Ward no: ${r.wardNo}</div>
           <div style="font-size:11px;color:#555;margin-bottom:6px">${r.description.slice(0, 80)}…</div>
           <div style="font-size:10px;color:#888">${r.id} · ${r.status.replace(/_/g, ' ')}</div>
         </div>`, { maxWidth: 220 })
@@ -1151,6 +1153,7 @@ function renderMapList(data) {
             <span style="font-size:10px;color:var(--text2)" title="${r.locationName || ''}">
               ${r.locationName ? shortenLocationText(r.locationName) : 'Location name pending'}
             </span>
+            <span style="font-size:10px;color:var(--blue);font-weight:700;margin-left:auto">W: ${r.wardNo}</span>
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">${r.description.slice(0, 60)}…</div>
         </div>`).join('')
@@ -1218,8 +1221,8 @@ window.openPanel = function (id) {
   const related    = reports.filter(x => x.issueType === r.issueType && x.id !== r.id);
   const supervisors = workers.filter(w => w.role === 'supervisor');
   const assignedDisplay = r.supervisorName || r.assignedWorkerName || 'Unassigned';
-  const locationDisplay = r.locationName
-    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found');
+  const locationDisplay = (r.locationName
+    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found')) + ` (Ward no: ${r.wardNo})`;
 
   document.getElementById('panelBody').innerHTML = `
     <div class="p-sec">
@@ -1282,7 +1285,11 @@ window.openPanel = function (id) {
           <div id="panelMap"></div>
           <div class="map-coords-chip" title="${r.locationName || ''}">${r.locationName ? shortenLocationText(r.locationName) : "Location name pending"}</div>
         </div>
-        ${r.locationName ? `<div style="font-size:14px;color:#1B3558;font-weight:600;margin-top:8px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
+        <div style="background:var(--blue-lt);padding:8px 12px;border-radius:6px;margin:8px 0;display:flex;align-items:center;gap:8px;border:1px solid #E2E8F0">
+          <div style="background:var(--blue);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">W</div>
+          <div style="font-family:var(--head);font-size:13px;font-weight:700;color:var(--blue)">Ward no: ${r.wardNo}</div>
+        </div>
+        ${r.locationName ? `<div style="font-size:14px;color:#1B3558;font-weight:600;margin-top:2px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
         <a href="https://www.openstreetmap.org/?mlat=${r.location.latitude}&mlon=${r.location.longitude}&zoom=17" target="_blank"
            style="font-size:11px;color:var(--teal);text-decoration:none;display:inline-block;margin-top:5px">Open in OpenStreetMap ↗</a>`
       : `<div style="background:var(--bg);border-radius:8px;padding:12px;font-size:12px;color:var(--text3)">
