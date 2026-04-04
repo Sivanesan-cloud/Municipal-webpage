@@ -752,8 +752,8 @@ function renderDash() {
     </div>
     <div class="scard scard-ack">
       <div class="sc-top">
-        <div><div class="sc-kicker">Department Pulse</div><div class="sc-num" id="dash-ack" style="color:var(--teal)">0</div><div class="sc-lbl">Acknowledged</div></div>
-        <div class="sc-icon" style="background:var(--teal-lt);color:var(--teal)"><svg viewBox="0 0 24 24"><path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/></svg></div>
+        <div><div class="sc-kicker">Department Pulse</div><div class="sc-num" id="dash-ack" style="color:#6B7280">0</div><div class="sc-lbl">Acknowledged</div></div>
+        <div class="sc-icon" style="background:#F1F3F5;color:#6B7280"><svg viewBox="0 0 24 24"><path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/></svg></div>
       </div>
       <div class="sc-note">Checked by Authority</div>
     </div>
@@ -1978,7 +1978,7 @@ let editingWorkerId = null;
 
 window.openAddWorkerModal = function () {
   editingWorkerId = null;
-  document.getElementById('modalTitle').textContent = 'Add New Worker';
+  document.getElementById('modalTitle').textContent = 'Add New Supervisor';
   document.getElementById('saveWorkerBtn').textContent = 'Save Worker';
   ['wName','wEmpId','wPhone'].forEach(id => (document.getElementById(id).value = ''));
   document.getElementById('wDept').value = '';

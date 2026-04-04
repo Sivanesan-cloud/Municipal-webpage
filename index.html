@@ -55,7 +55,7 @@
       </div>
       <div class="nav-item" data-page="workers" onclick="nav('workers')">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Workers
+        Supervisor
         <span class="nav-count" id="workerAlertCount" style="background:var(--amber)">0</span>
       </div>
       <div class="nav-item" data-page="analytics" onclick="nav('analytics')">
@@ -279,7 +279,7 @@
             </button>
             <button class="btn btn-primary btn-sm" id="addWorkerBtn" onclick="openAddWorkerModal()">
               <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Worker
+              Add Supervisor
             </button>
           </div>
         </div>
@@ -304,7 +304,7 @@
             <option value="medium">🟡 Medium (3–5)</option>
             <option value="high">🔴 High (6+)</option>
           </select>
-          <input type="text" class="fsel" id="wfSearch" placeholder="Search worker name…" oninput="renderWorkersPage()" style="min-width:180px"/>
+          <input type="text" class="fsel" id="wfSearch" placeholder="Search supervisor name…" oninput="renderWorkersPage()" style="min-width:180px"/>
           <button class="chip" onclick="clearWorkerFilters()">✕ Clear</button>
         </div>
 
@@ -373,7 +373,7 @@
 <div class="modal-backdrop" id="addWorkerBackdrop" onclick="closeAddWorkerModal()"></div>
 <div class="modal" id="addWorkerModal">
   <div class="modal-hd">
-    <div class="modal-title" id="modalTitle">Add New Worker</div>
+    <div class="modal-title" id="modalTitle">Add New Supervisor</div>
     <button class="panel-close" onclick="closeAddWorkerModal()">✕</button>
   </div>
   <div class="modal-body">
