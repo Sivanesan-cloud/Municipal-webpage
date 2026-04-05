@@ -680,6 +680,44 @@ async function pushUpdate(id, status, assigned, note, supervisorId) {
   } catch (e) { /* silent */ }
 }
 
+window.markRecentReportsForDonutDemo = async function () {
+  if (!db) {
+    toast('Live data is not connected yet', 'err');
+    return;
+  }
+
+  const candidates = reports.filter(r => !['resolved', 'closed'].includes(r.status)).slice(0, 2);
+  if (candidates.length < 2) {
+    toast('Need at least two active recent reports', 'info');
+    return;
+  }
+
+  const updates = [
+    { report: candidates[0], status: 'resolved', note: 'Updated from dashboard recent reports for status overview' },
+    { report: candidates[1], status: 'closed', note: 'Updated from dashboard recent reports for status overview' },
+  ];
+
+  try {
+    await Promise.all(
+      updates.map(({ report, status, note }) =>
+        updateDoc(doc(db, FIRESTORE_COLLECTION, report.id), {
+          status,
+          lastNote: note,
+          updatedAt: new Date(),
+        })
+      )
+    );
+
+    updates.forEach(({ report, status }) => {
+      report.status = status;
+    });
+    refreshAll();
+    toast(`Updated ${updates[0].report.id} to resolved and ${updates[1].report.id} to closed`, 'ok');
+  } catch (e) {
+    toast('Could not update recent reports', 'err');
+  }
+};
+
 
 //  NAVIGATION
 // ══════════════════════════════
@@ -747,28 +785,28 @@ function renderDash() {
     <div class="scard scard-active">
       <div class="sc-top">
         <div><div class="sc-kicker">Live Overview</div><div class="sc-num" id="dash-active">0</div><div class="sc-lbl">Active Cases</div></div>
-        <div class="sc-icon" style="background:var(--blue-lt);color:var(--blue)"><svg viewBox="0 0 24 24"><path d="M4 7h10l2 2h4v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/></svg></div>
+        <div class="sc-icon" style="background:linear-gradient(135deg,#FF6B35,#E8194B);color:#fff;box-shadow:0 4px 14px rgba(232,25,75,0.35)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="rgba(255,255,255,0.25)"/></svg></div>
       </div>
       <div class="sc-note">Submitted &amp; In Progress</div>
     </div>
     <div class="scard scard-ack">
       <div class="sc-top">
         <div><div class="sc-kicker">Department Pulse</div><div class="sc-num" id="dash-ack" style="color:#6B7280">0</div><div class="sc-lbl">Acknowledged</div></div>
-        <div class="sc-icon" style="background:#F1F3F5;color:#6B7280"><svg viewBox="0 0 24 24"><path d="M20 17a4 4 0 0 0-3.2-3.9A5 5 0 0 0 7 14.5"/></svg></div>
+        <div class="sc-icon" style="background:linear-gradient(135deg,#7C3AED,#4F46E5);color:#fff;box-shadow:0 4px 14px rgba(99,60,237,0.35)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" fill="rgba(255,255,255,0.15)"/><circle cx="12" cy="12" r="3" fill="rgba(255,255,255,0.4)"/></svg></div>
       </div>
       <div class="sc-note">Checked by Authority</div>
     </div>
     <div class="scard scard-pending">
       <div class="sc-top">
         <div><div class="sc-kicker">Queue Status</div><div class="sc-num" id="dash-pending" style="color:var(--amber)">0</div><div class="sc-lbl">Pending Reports</div></div>
-        <div class="sc-icon" style="background:var(--amber-lt);color:var(--amber)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div class="sc-icon" style="background:linear-gradient(135deg,#F59E0B,#EF6C00);color:#fff;box-shadow:0 4px 14px rgba(239,108,0,0.35)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="rgba(255,255,255,0.15)"/><line x1="12" y1="6" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg></div>
       </div>
       <div class="sc-note">In workflow pipeline</div>
     </div>
     <div class="scard scard-resolved">
       <div class="sc-top">
         <div><div class="sc-kicker">Closure Rate</div><div class="sc-num" id="dash-resolved" style="color:var(--green)">0</div><div class="sc-lbl">Resolved</div></div>
-        <div class="sc-icon" style="background:var(--green-lt);color:var(--green)"><svg viewBox="0 0 24 24"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/><polyline points="8.5 12.5 11 15 16 9"/></svg></div>
+        <div class="sc-icon" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;box-shadow:0 4px 14px rgba(5,150,105,0.35)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z" fill="rgba(255,255,255,0.15)"/><polyline points="8.5 12.5 11 15 16 9"/></svg></div>
       </div>
       <div class="sc-note">Completed &amp; Closed</div>
     </div>`;
@@ -783,6 +821,21 @@ function renderDash() {
   document.getElementById('dashBody').innerHTML = reports.length
     ? reports.slice(0, 6).map(r => rowHtml(r, true)).join('')
     : `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No data received yet</td></tr>`;
+
+  const recentHead = document.querySelector('#dashBody')?.closest('.card')?.querySelector('.card-head');
+  if (recentHead && !recentHead.querySelector('.dash-demo-actions')) {
+    const actions = document.createElement('div');
+    actions.className = 'dash-demo-actions';
+    actions.style.display = 'flex';
+    actions.style.gap = '8px';
+    actions.style.flexWrap = 'wrap';
+    actions.innerHTML = `
+      <button class="btn btn-outline btn-sm" onclick="markRecentReportsForDonutDemo()">Set Resolved / Closed</button>
+      <button class="btn btn-outline btn-sm" onclick="nav('issues')">View all →</button>`;
+    const oldButton = recentHead.querySelector('button');
+    if (oldButton) oldButton.remove();
+    recentHead.appendChild(actions);
+  }
 
   // Priority hotspots
   const typeCounts = computePriorities(reports);
@@ -951,61 +1004,98 @@ function renderStatusOverview() {
   if (!donutEl || !legendEl) return;
 
   const buckets = [
-    {
-      key: 'submitted',
-      label: 'Submitted',
-      color: '#E85D24',
-      match: r => ['submitted', 'assigned'].includes(r.status),
-    },
-    {
-      key: 'acknowledged',
-      label: 'Acknowledged',
-      color: '#F29E02',
-      match: r => r.status === 'acknowledged',
-    },
-    {
-      key: 'pending',
-      label: 'Pending',
-      color: '#22C55E',
-      match: r => ['in_progress', 'completed', 'verified'].includes(r.status),
-    },
-    {
-      key: 'resolved',
-      label: 'Resolved',
-      color: '#6B7280',
-      match: r => r.status === 'resolved',
-    },
-    {
-      key: 'closed',
-      label: 'Closed',
-      color: '#5E62FA',
-      match: r => r.status === 'closed',
-    },
+    { key: 'submitted',    label: 'Submitted',    color: '#E85D24', match: r => ['submitted', 'assigned'].includes(r.status) },
+    { key: 'acknowledged', label: 'Acknowledged', color: '#F29E02', match: r => r.status === 'acknowledged' },
+    { key: 'pending',      label: 'In Progress',  color: '#22C55E', match: r => ['in_progress', 'completed', 'verified'].includes(r.status) },
+    { key: 'resolved',     label: 'Resolved',     color: '#6B7280', match: r => r.status === 'resolved' },
+    { key: 'closed',       label: 'Closed',       color: '#5E62FA', match: r => r.status === 'closed' },
   ];
 
   const total = reports.length;
   const denom = total || 1;
   const data = buckets.map(b => ({ ...b, count: reports.filter(b.match).length }));
 
-  let stops = [];
-  let currentPct = 0;
+  // ── SVG donut with percentage labels ──
+  const cx = 100, cy = 100, r = 68, sw = 36;
+  const circumference = 2 * Math.PI * r;
+  const innerR = r - sw / 2 - 2; // ≈ 30 — radius of center hole fill
+
+  let segments = '';
+  let labels   = '';
+  let cumPct   = 0;
+
   data.forEach(b => {
-    const pct = (b.count / denom) * 100;
-    if (pct > 0) {
-      stops.push(`${b.color} ${currentPct}% ${currentPct + pct}%`);
-      currentPct += pct;
+    const pct = b.count / denom;
+    if (pct <= 0) return;
+
+    const dashLen = pct * circumference;
+    const gapLen  = circumference - dashLen;
+    // start at top (−90°) using stroke-dashoffset
+    const offset  = circumference * (0.25 - cumPct);
+
+    segments += `<circle cx="${cx}" cy="${cy}" r="${r}"
+      fill="none" stroke="${b.color}" stroke-width="${sw}"
+      stroke-dasharray="${dashLen.toFixed(2)} ${gapLen.toFixed(2)}"
+      stroke-dashoffset="${offset.toFixed(2)}"
+      stroke-linecap="butt"/>`;
+
+    // Percentage label — only if segment is >= 5%
+    if (pct >= 0.05) {
+      const midAngle = (cumPct + pct / 2) * 2 * Math.PI - Math.PI / 2;
+      const lx = (cx + r * Math.cos(midAngle)).toFixed(1);
+      const ly = (cy + r * Math.sin(midAngle)).toFixed(1);
+      const pctStr = Math.round(pct * 100) + '%';
+      labels += `<text x="${lx}" y="${ly}"
+        text-anchor="middle" dominant-baseline="central"
+        fill="#fff" font-size="10" font-weight="800"
+        font-family="var(--head, sans-serif)"
+        style="text-shadow:0 1px 3px rgba(0,0,0,0.4)">${pctStr}</text>`;
     }
+
+    cumPct += pct;
   });
 
-  donutEl.style.background = stops.length
-    ? `conic-gradient(${stops.join(', ')})`
-    : 'conic-gradient(var(--border) 0% 100%)';
+  // Empty state ring
+  if (!segments) {
+    segments = `<circle cx="${cx}" cy="${cy}" r="${r}"
+      fill="none" stroke="#E8EDF2" stroke-width="${sw}"/>`;
+  }
 
-  legendEl.innerHTML = data.map(b => `
+  donutEl.style.background = 'none';
+  donutEl.innerHTML = `
+    <svg viewBox="0 0 200 200" width="100%" height="100%" style="display:block;overflow:visible">
+      <defs>
+        <radialGradient id="cg" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+          <stop offset="100%" stop-color="#EDF6F6" stop-opacity="0.6"/>
+        </radialGradient>
+      </defs>
+      <!-- background ring -->
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E8EDF2" stroke-width="${sw}"/>
+      <!-- coloured segments -->
+      ${segments}
+      <!-- percentage labels on ring -->
+      ${labels}
+      <!-- center hole -->
+      <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="#F4F8F9"/>
+      <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="url(#cg)"/>
+      <!-- center text: total count -->
+      <text x="${cx}" y="${cy - 9}" text-anchor="middle" dominant-baseline="central"
+        fill="#17314D" font-size="24" font-weight="800"
+        font-family="var(--head, sans-serif)">${total || '—'}</text>
+      <text x="${cx}" y="${cy + 13}" text-anchor="middle" dominant-baseline="central"
+        fill="#55697D" font-size="8" font-weight="700" letter-spacing="1.5"
+        font-family="var(--head, sans-serif)">TOTAL</text>
+    </svg>`;
+
+  legendEl.innerHTML = data.map(b => {
+    const pct = Math.round((b.count / denom) * 100);
+    return `
     <div class="sd-leg-item">
       <div class="sd-leg-dot" style="background:${b.color}"></div>
-      <span>${b.label} (${Math.round((b.count / denom) * 100)}%)</span>
-    </div>`).join('');
+      <span>${b.label}&nbsp;<strong style="color:${b.color}">${pct}%</strong>&nbsp;(${b.count})</span>
+    </div>`;
+  }).join('');
 }
 
 function renderStatusChart(elId) {
