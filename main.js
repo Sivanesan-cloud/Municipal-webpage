@@ -7,7 +7,7 @@
 
 import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy }
+import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 
@@ -1302,8 +1302,11 @@ window.openPanel = function (id) {
         <select class="fc" id="upSupervisor">
           <option value="">-- Select Dept Supervisor --</option>
           ${supervisors.map(s => `
-            <option value="${s.id}" ${r.supervisorId === s.id ? 'selected' : ''}>
-              ${s.name} (${s.department})
+            <option value="${s.id}" 
+                    data-name="${s.name}" 
+                    data-dept="${s.raw?.department || 'General Admin'}"
+                    ${r.supervisorId === s.id ? 'selected' : ''}>
+              ${s.name} (${s.raw?.department || 'General Admin'})
             </option>
           `).join('')}
         </select>
@@ -1361,30 +1364,45 @@ window.saveUpdate = async function (id) {
   const r = reports.find(x => x.id === id);
   if (!r) return;
 
-  const supervisorId = document.getElementById('upSupervisor').value;
-  const supervisor = workers.find(w => w.id === supervisorId);
+  const sel = document.getElementById('upSupervisor');
+  const opt = sel?.options[sel.selectedIndex];
+  const supervisorId = sel?.value;
+  
+  // Try finding in global array first, fallback to DOM data attributes
+  let supervisor = supervisors.find(s => s.id === supervisorId);
+  let supervisorName = supervisor?.name || opt?.getAttribute('data-name');
+  let department = supervisor?.raw?.department || opt?.getAttribute('data-dept') || 'General Admin';
+
   const note = document.getElementById('upNote').value;
 
-  if (!supervisorId) {
-    toast('Please select a supervisor', 'err');
+  if (!supervisorId || !supervisorName) {
+    toast('Please select a valid supervisor', 'err');
+    return;
+  }
+
+  if (!db) {
+    toast('Database connection not available', 'err');
     return;
   }
 
   try {
-    await updateDoc(doc(db, FIRESTORE_COLLECTION, id), {
-      status: 'assigned', // Status moves to Assigned per the workflow
+    const reportRef = doc(db, FIRESTORE_COLLECTION, id);
+    await updateDoc(reportRef, {
+      status: 'assigned',
       supervisorId: supervisorId,
-      supervisorName: supervisor.name,
-      assigned: supervisor.department,
+      supervisorName: supervisorName,
+      assigned: `${supervisorName} (${department})`,
+      lastNote: `Assigned to ${supervisorName}`,
       adminNote: note || '',
-      updatedAt: new Date()
+      updatedAt: serverTimestamp()
     });
 
     closePanel();
     refreshAll();
-    toast(`Issue assigned to Supervisor ${supervisor.name}`, 'ok');
+    toast(`Issue assigned to Supervisor ${supervisorName}`, 'ok');
   } catch (e) {
-    toast('Update failed', 'err');
+    console.error("Firestore Update Error:", e);
+    toast(`Update failed: ${e.message || 'Check connection'}`, 'err');
   }
 };
 
