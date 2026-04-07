@@ -7,7 +7,7 @@
 
 import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy, serverTimestamp }
+import { getFirestore, collection, onSnapshot, doc, getDoc, updateDoc, query, orderBy, serverTimestamp, writeBatch }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 
@@ -71,6 +71,8 @@ const FIREBASE_CONFIG = {
 
 const FIRESTORE_COLLECTION = 'reports';
 const USERS_COLLECTION = 'users';
+const WARDS_COLLECTION = 'WARDS';
+const OFFICIALS_COLLECTION = 'OFFICIALS';
 
 
 // ══════════════════════════════
@@ -204,6 +206,119 @@ function userDisplayName(data, fallbackId) {
   );
 }
 
+function formatWardNo(wardNo) {
+  if (wardNo === null || wardNo === undefined || wardNo === '') return '—';
+  return wardNo;
+}
+
+function normalizeLocationInput(rawLocation) {
+  if (!rawLocation) return null;
+  const pickWard = (loc) =>
+    loc?.wardNo ?? loc?.wardNumber ?? loc?.ward_no ?? loc?.ward ?? null;
+  const pickName = (loc) =>
+    loc?.name || loc?.label || loc?.address || loc?.locationName || '';
+
+  if (Array.isArray(rawLocation)) {
+    const item = rawLocation.find(loc =>
+      loc && (loc.latitude !== undefined || loc._lat !== undefined || loc.lat !== undefined ||
+        loc.longitude !== undefined || loc._long !== undefined || loc.lng !== undefined || loc.lon !== undefined)
+    ) || rawLocation[0];
+    if (!item) return null;
+    return {
+      latitude: item.latitude ?? item._lat ?? item.lat ?? 0,
+      longitude: item.longitude ?? item._long ?? item.lng ?? item.lon ?? 0,
+      name: pickName(item),
+      wardNo: pickWard(item),
+    };
+  }
+
+  return {
+    latitude: rawLocation.latitude ?? rawLocation._lat ?? rawLocation.lat ?? 0,
+    longitude: rawLocation.longitude ?? rawLocation._long ?? rawLocation.lng ?? rawLocation.lon ?? 0,
+    name: pickName(rawLocation),
+    wardNo: pickWard(rawLocation),
+  };
+}
+
+function officialRoleFromId(id) {
+  const prefix = (id || '').toString().trim().toUpperCase().slice(0, 2);
+  if (prefix === 'SI') return 'Sanitary Inspector';
+  if (prefix === 'AE') return 'Assistant Engineer';
+  if (prefix === 'JE') return 'Junior Engineer';
+  return 'Official';
+}
+
+async function loadWardOfficials(wardNo) {
+  if (!db || !wardNo) return [];
+  const key = String(wardNo);
+  if (wardOfficialsCache.has(key)) return wardOfficialsCache.get(key);
+
+  const wardId = `WARD${padWardId(Number(wardNo))}`;
+  const wardSnap = await getDoc(doc(db, WARDS_COLLECTION, wardId));
+  if (!wardSnap.exists()) {
+    wardOfficialsCache.set(key, []);
+    return [];
+  }
+
+  const wardData = wardSnap.data() || {};
+  const officials = wardData.officials || {};
+  const roleOrder = [
+    { key: 'sanitaryInspector', label: 'Sanitary Inspector' },
+    { key: 'assistantEngineer', label: 'Assistant Engineer' },
+    { key: 'juniorEngineer', label: 'Junior Engineer' },
+  ];
+
+  const list = [];
+  for (const role of roleOrder) {
+    const ref = officials[role.key];
+    if (!ref) continue;
+    const snap = await getDoc(ref);
+    if (!snap.exists()) continue;
+    const data = snap.data() || {};
+    list.push({
+      id: snap.id,
+      name: data.name || snap.id,
+      role: role.label,
+    });
+  }
+
+  wardOfficialsCache.set(key, list);
+  return list;
+}
+
+async function populateWardOfficialsDropdown(report) {
+  const sel = document.getElementById('upSupervisor');
+  if (!sel) return;
+
+  sel.disabled = true;
+  sel.innerHTML = `<option value="">Loading ward officials...</option>`;
+
+  const wardNo = report?.wardNo;
+  if (!wardNo) {
+    sel.innerHTML = `<option value="">Ward not available</option>`;
+    return;
+  }
+
+  const officials = await loadWardOfficials(wardNo);
+  if (!officials.length) {
+    sel.innerHTML = `<option value="">No officials found for Ward ${wardNo}</option>`;
+    return;
+  }
+
+  sel.innerHTML = `<option value="">-- Select Ward Official --</option>`;
+  officials.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = o.name;
+    opt.setAttribute('data-name', o.name);
+    opt.setAttribute('data-role', o.role || officialRoleFromId(o.id));
+    if (report?.supervisorId === o.id) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  sel.disabled = false;
+}
+
 // ══════════════════════════════
 //  STATE
 // ══════════════════════════════
@@ -218,6 +333,7 @@ let leafletMap  = null;
 let mapMarkers  = [];
 let panelMap    = null;
 let currentPanelId = null;
+const wardOfficialsCache = new Map();
 let selectedMapId = null;
 let mapRefreshTimer = null;
 let locationUiRefreshTimer = null;
@@ -490,7 +606,7 @@ function syncOpenPanelLocation(issueId = currentPanelId) {
   if (!r) return;
 
   const locationDisplay = (r.locationName
-    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found')) + ` (Ward no: ${r.wardNo})`;
+    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found'));
 
   body.querySelectorAll('.ic').forEach(card => {
     const label = card.querySelector('label');
@@ -595,13 +711,14 @@ async function connectFirebase() {
       (snap) => {
         const live = snap.docs.map(d => {
           const data = d.data();
+          const normalizedLocation = normalizeLocationInput(data.location);
           const locationName =
             data.locationName ||
             data.location_label ||
             data.locationLabel ||
             data.address ||
             data.addressText ||
-            data.location?.name ||
+            normalizedLocation?.name ||
             '';
           return {
             id:               d.id,
@@ -609,8 +726,8 @@ async function connectFirebase() {
             description:      data.description || '',
             timestamp:        data.timestamp?.toDate?.()?.toISOString?.() || data.timestamp || new Date().toISOString(),
             timestampDisplay: data.timestampDisplay || '',
-            location:         data.location
-              ? { latitude: data.location.latitude ?? data.location._lat ?? 0, longitude: data.location.longitude ?? data.location._long ?? 0 }
+            location:         normalizedLocation
+              ? { latitude: normalizedLocation.latitude, longitude: normalizedLocation.longitude }
               : null,
             locationName,
             images:   normalizeImages(data),
@@ -618,6 +735,16 @@ async function connectFirebase() {
             source:          data.source  || 'flutter_mobile_app',
             assigned:        data.assigned || ROUTING[data.issueType] || 'Unassigned',
             supervisorName:  data.supervisorName || '',
+            assignedWorkerId:
+              data.assignedWorkerId ||
+              data.assigned_worker_id ||
+              data.workerId ||
+              '',
+            assignedWorkerName:
+              data.assignedWorkerName ||
+              data.assigned_worker_name ||
+              data.workerName ||
+              '',
             // Proof of Execution fields
             proofImageUrl:   data.proofImageUrl   || null,
             proofNote:       data.proofNote       || '',
@@ -628,7 +755,7 @@ async function connectFirebase() {
             ratingComment:   data.ratingComment   || '',
             ratingAt:        data.ratingAt        || null,
             supervisorId:    data.supervisorId    || '',
-            wardNo:          data.wardNo || data.wardNumber || data.ward_no || (Math.abs(d.id.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0)) % 100) + 1,
+            wardNo:          data.wardNo || data.wardNumber || data.ward_no || normalizedLocation?.wardNo || null,
           };
         });
         reports  = live;
@@ -666,7 +793,87 @@ async function connectFirebase() {
   }
 }
 
-async function pushUpdate(id, status, assigned, note, supervisorId) {
+function padWardId(n) {
+  return String(n).padStart(2, '0');
+}
+
+window.seedOfficials = async function () {
+  if (!db) {
+    toast('Live data is not connected yet', 'err');
+    return;
+  }
+
+  const officialsCollection = 'OFFICIALS';
+  const roles = [
+    { prefix: 'SI', title: 'SANITORY INSPECTOR' },
+    { prefix: 'AE', title: 'ASSISTANT ENGINEER' },
+    { prefix: 'JE', title: 'JUNIOR ENGINEER' },
+  ];
+
+  try {
+    const batch = writeBatch(db);
+    let count = 0;
+
+    roles.forEach(role => {
+      for (let ward = 1; ward <= 100; ward += 1) {
+        const id = `${role.prefix}${padWardId(ward)}`;
+        const name = `${role.title} - WARD ${ward}`;
+        batch.set(doc(db, officialsCollection, id), { id, name });
+        count += 1;
+      }
+    });
+
+    await batch.commit();
+    toast(`Seeded ${count} officials in ${officialsCollection}`, 'ok');
+  } catch (e) {
+    console.error('Officials seeding error:', e);
+    toast('Could not seed officials', 'err');
+  }
+};
+
+window.seedWards = async function () {
+  if (!db) {
+    toast('Live data is not connected yet', 'err');
+    return;
+  }
+
+  const wardsCollection = 'WARDS';
+  const officialsCollection = 'OFFICIALS';
+  const roles = [
+    { prefix: 'SI', key: 'sanitaryInspector' },
+    { prefix: 'AE', key: 'assistantEngineer' },
+    { prefix: 'JE', key: 'juniorEngineer' },
+  ];
+
+  try {
+    const batch = writeBatch(db);
+    let count = 0;
+
+    for (let ward = 1; ward <= 100; ward += 1) {
+      const wardId = `WARD${padWardId(ward)}`;
+      const officials = {};
+
+      roles.forEach(role => {
+        const officialId = `${role.prefix}${padWardId(ward)}`;
+        officials[role.key] = doc(db, officialsCollection, officialId);
+      });
+
+      batch.set(doc(db, wardsCollection, wardId), {
+        wardNumber: ward,
+        officials,
+      });
+      count += 1;
+    }
+
+    await batch.commit();
+    toast(`Seeded ${count} wards in ${wardsCollection}`, 'ok');
+  } catch (e) {
+    console.error('Wards seeding error:', e);
+    toast('Could not seed wards', 'err');
+  }
+};
+
+async function pushUpdate(id, status, assigned, note, supervisorId, extra) {
   if (!db) return;
   try {
     const payload = {
@@ -676,6 +883,7 @@ async function pushUpdate(id, status, assigned, note, supervisorId) {
       updatedAt: new Date(),
     };
     if (supervisorId !== undefined) payload.supervisorId = supervisorId;
+    if (extra && typeof extra === 'object') Object.assign(payload, extra);
     await updateDoc(doc(db, FIRESTORE_COLLECTION, id), payload);
   } catch (e) { /* silent */ }
 }
@@ -869,8 +1077,8 @@ function rowHtml(r, short = false) {
   const count = typeCounts[r.issueType] || 0;
   const loc   = r.location
     ? (r.locationName
-      ? `<div style="line-height:1.2"><span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span><div style="font-size:10px;color:var(--text3);font-weight:600">Ward no: ${r.wardNo}</div></div>`
-      : `<div style="line-height:1.2"><span style="color:var(--text3);font-size:11px">Resolving address...</span><div style="font-size:10px;color:var(--text3);font-weight:600">Ward no: ${r.wardNo}</div></div>`)
+      ? `<div style="line-height:1.2"><span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span></div>`
+      : `<div style="line-height:1.2"><span style="color:var(--text3);font-size:11px">Resolving address...</span></div>`)
     : `<span style="color:var(--text3);font-size:11px">No location provided</span>`;
   const imgs  = r.images?.length
     ? `<span style="font-family:var(--mono);font-size:11px;color:var(--teal);font-weight:600">📷 ${r.images.length}</span>`
@@ -1209,7 +1417,7 @@ function updateMapPins(data) {
         <div style="font-family:sans-serif;min-width:180px">
           <div style="font-weight:700;font-size:13px;margin-bottom:4px">${r.issueType}</div>
           ${r.locationName ? `<div style="font-size:11px;color:#3a3a3a;margin-bottom:2px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
-          <div style="font-size:10px;color:var(--blue);font-weight:700;margin-bottom:4px">Ward no: ${r.wardNo}</div>
+          <div style="font-size:10px;color:var(--blue);font-weight:700;margin-bottom:4px">Ward no: ${formatWardNo(r.wardNo)}</div>
           <div style="font-size:11px;color:#555;margin-bottom:6px">${r.description.slice(0, 80)}…</div>
           <div style="font-size:10px;color:#888">${r.id} · ${r.status.replace(/_/g, ' ')}</div>
         </div>`, { maxWidth: 220 })
@@ -1237,7 +1445,7 @@ function renderMapList(data) {
             <span style="font-size:10px;color:var(--text2)" title="${r.locationName || ''}">
               ${r.locationName ? shortenLocationText(r.locationName) : 'Location name pending'}
             </span>
-            <span style="font-size:10px;color:var(--blue);font-weight:700;margin-left:auto">W: ${r.wardNo}</span>
+            <span style="font-size:10px;color:var(--blue);font-weight:700;margin-left:auto">W: ${formatWardNo(r.wardNo)}</span>
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">${r.description.slice(0, 60)}…</div>
         </div>`).join('')
@@ -1306,7 +1514,7 @@ window.openPanel = function (id) {
   const supervisors = workers.filter(w => w.role === 'supervisor');
   const assignedDisplay = r.supervisorName || r.assignedWorkerName || 'Unassigned';
   const locationDisplay = (r.locationName
-    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found')) + ` (Ward no: ${r.wardNo})`;
+    || (hasValidCoords(r.location) ? 'Resolving exact address...' : 'No GPS data found'));
 
   document.getElementById('panelBody').innerHTML = `
     <div class="p-sec">
@@ -1371,7 +1579,7 @@ window.openPanel = function (id) {
         </div>
         <div style="background:var(--blue-lt);padding:8px 12px;border-radius:6px;margin:8px 0;display:flex;align-items:center;gap:8px;border:1px solid #E2E8F0">
           <div style="background:var(--blue);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0">W</div>
-          <div style="font-family:var(--head);font-size:13px;font-weight:700;color:var(--blue)">Ward no: ${r.wardNo}</div>
+          <div style="font-family:var(--head);font-size:13px;font-weight:700;color:var(--blue)">Ward no: ${formatWardNo(r.wardNo)}</div>
         </div>
         ${r.locationName ? `<div style="font-size:14px;color:#1B3558;font-weight:600;margin-top:2px" title="${r.locationName}">${shortenLocationText(r.locationName)}</div>` : ''}
         <a href="https://www.openstreetmap.org/?mlat=${r.location.latitude}&mlon=${r.location.longitude}&zoom=17" target="_blank"
@@ -1388,17 +1596,9 @@ window.openPanel = function (id) {
     <div class="p-sec">
       <div class="p-sec-lbl">Department Assignment</div>
       <div class="fg">
-        <label>Assign to Supervisor</label>
+        <label>Assign to Official</label>
         <select class="fc" id="upSupervisor">
-          <option value="">-- Select Dept Supervisor --</option>
-          ${supervisors.map(s => `
-            <option value="${s.id}" 
-                    data-name="${s.name}" 
-                    data-dept="${s.raw?.department || 'General Admin'}"
-                    ${r.supervisorId === s.id ? 'selected' : ''}>
-              ${s.name} (${s.raw?.department || 'General Admin'})
-            </option>
-          `).join('')}
+          <option value="">Loading ward officials...</option>
         </select>
       </div>
       <div class="fg">
@@ -1431,6 +1631,8 @@ window.openPanel = function (id) {
   document.getElementById('overlay').classList.add('open');
   document.getElementById('panel').classList.add('open');
 
+  populateWardOfficialsDropdown(r);
+
   // Render mini Leaflet map in panel (after DOM settles)
   if (r.location) {
     setTimeout(() => {
@@ -1461,12 +1663,12 @@ window.saveUpdate = async function (id) {
   // Try finding in global array first, fallback to DOM data attributes
   let supervisor = supervisors.find(s => s.id === supervisorId);
   let supervisorName = supervisor?.name || opt?.getAttribute('data-name');
-  let department = supervisor?.raw?.department || opt?.getAttribute('data-dept') || 'General Admin';
+  let officialRole = opt?.getAttribute('data-role') || officialRoleFromId(supervisorId);
 
   const note = document.getElementById('upNote').value;
 
   if (!supervisorId || !supervisorName) {
-    toast('Please select a valid supervisor', 'err');
+    toast('Please select a valid ward official', 'err');
     return;
   }
 
@@ -1481,15 +1683,16 @@ window.saveUpdate = async function (id) {
       status: 'assigned',
       supervisorId: supervisorId,
       supervisorName: supervisorName,
-      assigned: `${supervisorName} (${department})`,
+      assigned: `${supervisorName}`,
       lastNote: `Assigned to ${supervisorName}`,
+      assignedRole: officialRole,
       adminNote: note || '',
       updatedAt: serverTimestamp()
     });
 
     closePanel();
     refreshAll();
-    toast(`Issue assigned to Supervisor ${supervisorName}`, 'ok');
+    toast(`Issue assigned to ${supervisorName}`, 'ok');
   } catch (e) {
     console.error("Firestore Update Error:", e);
     toast(`Update failed: ${e.message || 'Check connection'}`, 'err');
@@ -1802,7 +2005,17 @@ window.assignWorkerToIssue = async function (issueId, workerId, fromPanel = fals
   if (issue.assignedWorkerId === workerId) worker.activeTasks++;
 
   saveWorkers(workers);
-  await pushUpdate(issueId, issue.status, `${worker.name} (${worker.department})`, `Assigned to ${worker.name}`);
+  await pushUpdate(
+    issueId,
+    issue.status,
+    `${worker.name} (${worker.department})`,
+    `Assigned to ${worker.name}`,
+    undefined,
+    {
+      assignedWorkerId: workerId,
+      assignedWorkerName: worker.name,
+    }
+  );
 
   refreshAll();
   renderWorkersPage();
@@ -1829,7 +2042,17 @@ window.unassignWorkerFromIssue = async function (issueId) {
   issue.assigned           = ROUTING[issue.issueType] || 'Unassigned';
 
   saveWorkers(workers);
-  await pushUpdate(issueId, issue.status, issue.assigned, 'Worker unassigned');
+  await pushUpdate(
+    issueId,
+    issue.status,
+    issue.assigned,
+    'Worker unassigned',
+    undefined,
+    {
+      assignedWorkerId: null,
+      assignedWorkerName: null,
+    }
+  );
 
   refreshAll();
   renderWorkersPage();
