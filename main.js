@@ -103,10 +103,18 @@ function getPriority(issueType, typeCounts) {
 
 function priHTML(level, count) {
   const labels = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
-  const icons  = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
-  return `<span class="pri pri-${level}" title="${count} active report${count !== 1 ? 's' : ''} of this type">
-    <span class="pri-dot"></span>${icons[level]} ${labels[level]}
-    <span style="font-size:10px;font-weight:400;opacity:0.75;margin-left:2px">×${count}</span>
+  const icons  = {
+    critical: '<span aria-hidden="true">🔴</span>',
+    high: '<span aria-hidden="true">🟠</span>',
+    medium: `<span class="pri-symbol-medium" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M12 4L20 18H4L12 4Z" fill="currentColor"></path>
+      </svg>
+    </span>`,
+    low: '<span aria-hidden="true">🟢</span>',
+  };
+  return `<span class="pri pri-${level} pri-symbol-only" title="${labels[level]} priority, ${count} active report${count !== 1 ? 's' : ''} of this type" aria-label="${labels[level]} priority">
+    ${icons[level]}
   </span>`;
 }
 
@@ -114,7 +122,7 @@ function priIconHTML(level, count) {
   const cfg = {
     critical: { label: 'Critical', color: '#FF2E24', symbol: '!' },
     high:     { label: 'High',     color: '#F59E0B', symbol: '!!' },
-    medium:   { label: 'Medium',   color: '#FBBF24', symbol: '!!' },
+    medium:   { label: 'Medium',   color: '#FBBF24', symbol: '!' },
     low:      { label: 'Low',      color: '#84CC16', symbol: '!' },
   };
   const meta = cfg[level] || cfg.low;
@@ -225,6 +233,24 @@ function userDisplayName(data, fallbackId) {
 function formatWardNo(wardNo) {
   if (wardNo === null || wardNo === undefined || wardNo === '') return '—';
   return wardNo;
+}
+
+function formatDashboardReportId(rawId) {
+  const source = String(rawId || '').trim();
+  if (!source) return 'RPT-00000XXX';
+
+  if (/^RPT-[A-Z0-9]+$/i.test(source)) return source.toUpperCase();
+
+  const cleaned = source.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  let hash = 0;
+  for (const ch of cleaned || 'REPORT') {
+    hash = ((hash * 31) + ch.charCodeAt(0)) >>> 0;
+  }
+
+  const digitPool = `${cleaned.replace(/\D/g, '')}${String(hash % 100000).padStart(5, '0')}`;
+  const letterPool = `${cleaned.replace(/[^A-Z]/g, '')}${hash.toString(36).toUpperCase().replace(/[^A-Z]/g, '')}XXX`;
+
+  return `RPT-${digitPool.slice(0, 5).padEnd(5, '0')}${letterPool.slice(0, 3)}`;
 }
 
 function normalizeLocationInput(rawLocation) {
@@ -1074,7 +1100,7 @@ function renderDash() {
 
   document.getElementById('dashBody').innerHTML = reports.length
     ? reports.slice(0, 6).map(r => rowHtml(r, true)).join('')
-    : `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No data received yet</td></tr>`;
+    : `<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">No data received yet</td></tr>`;
 
   const recentHead = document.querySelector('#dashBody')?.closest('.card')?.querySelector('.card-head');
   if (recentHead && !recentHead.querySelector('.dash-demo-actions')) {
@@ -1136,11 +1162,12 @@ function rowHtml(r, short = false) {
 
   if (short) {
     return `<tr onclick="openPanel('${r.id}')">
-      <td><span class="mono-id">${r.id}</span></td>
+      <td><span class="mono-id">${formatDashboardReportId(r.id)}</span></td>
+      <td><span style="font-size:11px;color:var(--text2);font-weight:600">${formatWardNo(r.wardNo)}</span></td>
       <td><span class="type-pill">${r.issueType}</span></td>
-      <td>${priHTML(pri, count)}</td>
-      <td><div style="font-size:12px;font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description}</div></td>
-      <td>${loc}</td>
+      <td>${priIconHTML(pri, count)}</td>
+      <td><div style="font-size:12px;font-weight:500;max-width:252px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description}</div></td>
+      <td><div style="max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${loc}</div></td>
       <td>${imgs}</td>
       <td>${badge(r.status)}</td>
       <td><span style="font-size:11px;color:var(--text3)">${fmt(r.timestamp)}</span></td>
