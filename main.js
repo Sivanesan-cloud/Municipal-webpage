@@ -110,6 +110,22 @@ function priHTML(level, count) {
   </span>`;
 }
 
+function priIconHTML(level, count) {
+  const cfg = {
+    critical: { label: 'Critical', color: '#FF2E24', symbol: '!' },
+    high:     { label: 'High',     color: '#F59E0B', symbol: '!!' },
+    medium:   { label: 'Medium',   color: '#FBBF24', symbol: '!!' },
+    low:      { label: 'Low',      color: '#84CC16', symbol: '!' },
+  };
+  const meta = cfg[level] || cfg.low;
+  return `<span class="pri pri-${level} pri-icon" title="${meta.label} priority, ${count} active report${count !== 1 ? 's' : ''}">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 2.2L1.8 19.5c-.4.7.1 1.5.9 1.5h19c.8 0 1.3-.8.9-1.5L12 2.2z" fill="${meta.color}"/>
+      <text x="12" y="15" text-anchor="middle" font-family="Arial, sans-serif" font-size="8.8" font-weight="900" fill="#fff">${meta.symbol}</text>
+    </svg>
+  </span>`;
+}
+
 function priorityReasonBarHtml(count) {
   const cap = Math.max(PRI_THRESHOLDS.critical + 2, count, 6);
   const pMedium = (PRI_THRESHOLDS.medium / cap) * 100;
@@ -394,6 +410,36 @@ function shortenLocationText(name) {
   const base = parts.slice(0, 3).join(', ');
   if (base.length <= 42) return base;
   return base.slice(0, 39).trimEnd() + '…';
+}
+
+function stripWardFromLocationText(name, wardNo) {
+  if (!name) return '';
+  let text = String(name);
+  const ward = wardNo === null || wardNo === undefined || wardNo === ''
+    ? null
+    : String(wardNo).trim();
+
+  const patterns = [
+    /\bward\s*(?:no\.?|number)?\s*[:\-]?\s*\d+\b/ig,
+    /\bward\s*-\s*\d+\b/ig,
+    /\bward\s+\d+\b/ig,
+  ];
+
+  if (ward) {
+    patterns.push(new RegExp(`\\bward\\s*(?:no\\.?|number)?\\s*[:\\-]?\\s*${ward}\\b`, 'ig'));
+  }
+
+  patterns.forEach(pattern => {
+    text = text.replace(pattern, ' ');
+  });
+
+  text = text
+    .replace(/\s*,\s*,+/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s,;\-]+|[\s,;\-]+$/g, '')
+    .trim();
+
+  return text;
 }
 
 async function fetchLocationName(lat, lon) {
@@ -1075,10 +1121,14 @@ function rowHtml(r, short = false) {
   const typeCounts = computePriorities(reports);
   const pri   = getPriority(r.issueType, typeCounts);
   const count = typeCounts[r.issueType] || 0;
+  const locationText = stripWardFromLocationText(r.locationName, r.wardNo);
+  const locText = locationText
+    ? `<div style="line-height:1.25"><span style="font-size:11px" title="${locationText}">${locationText}</span></div>`
+    : (r.locationName
+      ? `<span style="color:var(--text3);font-size:11px">—</span>`
+      : `<div style="line-height:1.2"><span style="color:var(--text3);font-size:11px">Resolving address...</span></div>`);
   const loc   = r.location
-    ? (r.locationName
-      ? `<div style="line-height:1.2"><span style="font-size:11px" title="${r.locationName}">${shortenLocationText(r.locationName)}</span></div>`
-      : `<div style="line-height:1.2"><span style="color:var(--text3);font-size:11px">Resolving address...</span></div>`)
+    ? locText
     : `<span style="color:var(--text3);font-size:11px">No location provided</span>`;
   const imgs  = r.images?.length
     ? `<span style="font-family:var(--mono);font-size:11px;color:var(--teal);font-weight:600">📷 ${r.images.length}</span>`
@@ -1089,7 +1139,7 @@ function rowHtml(r, short = false) {
       <td><span class="mono-id">${r.id}</span></td>
       <td><span class="type-pill">${r.issueType}</span></td>
       <td>${priHTML(pri, count)}</td>
-      <td><div style="font-size:12px;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description}</div></td>
+      <td><div style="font-size:12px;font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description}</div></td>
       <td>${loc}</td>
       <td>${imgs}</td>
       <td>${badge(r.status)}</td>
@@ -1099,15 +1149,15 @@ function rowHtml(r, short = false) {
 
   return `<tr onclick="openPanel('${r.id}')">
     <td><span class="mono-id">${r.id}</span></td>
+    <td><span style="font-size:11px;color:var(--text2);font-weight:600">${formatWardNo(r.wardNo)}</span></td>
     <td><span class="type-pill">${r.issueType}</span></td>
-    <td>${priHTML(pri, count)}</td>
-    <td><div style="font-size:12px;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description}</div></td>
+    <td>${priIconHTML(pri, count)}</td>
+    <td><div style="font-size:12px;font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description}</div></td>
     <td>${loc}</td>
     <td>${imgs}</td>
     <td>${badge(r.status)}</td>
     <td style="font-size:11px;color:var(--text2)">${r.assigned || '—'}</td>
     <td><span style="font-size:11px;color:var(--text3)">${fmt(r.timestamp)}</span></td>
-    <td><button class="btn btn-outline btn-sm" style="padding:4px 9px;font-size:11px" onclick="event.stopPropagation();openPanel('${r.id}')">Open →</button></td>
   </tr>`;
 }
 

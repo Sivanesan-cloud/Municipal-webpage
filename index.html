@@ -14,6 +14,44 @@
 
   <!-- App Styles -->
   <link rel="stylesheet" href="styles.css"/>
+  <style>
+    html, body {
+      width: 100vw !important;
+      height: 100vh !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      position: fixed !important;
+      overscroll-behavior: none !important;
+    }
+    .shell {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: 100vw !important;
+      overflow: hidden !important;
+    }
+    .main {
+      width: 100% !important;
+      max-width: calc(100vw - 220px) !important;
+      overflow-x: hidden !important;
+      min-width: 0 !important;
+    }
+    .page, .page-scroll {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+    .issues-table-wrap {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+      display: block !important;
+      overscroll-behavior-x: none !important;
+    }
+    @media (max-width: 900px) {
+      .main { max-width: 100vw !important; }
+    }
+  </style>
 </head>
 <body>
 
@@ -101,12 +139,14 @@
             <span class="card-title">Recent Reports</span>
             <button class="btn btn-outline btn-sm" onclick="nav('issues')">View all →</button>
           </div>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Issue Type</th><th>Priority</th><th>Description</th><th>Location</th><th>Photos</th><th>Status</th><th>Received</th></tr>
-            </thead>
-            <tbody id="dashBody"></tbody>
-          </table>
+          <div class="issues-table-wrap">
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Issue Type</th><th>Priority</th><th>Description</th><th>Location</th><th>Photos</th><th>Status</th><th>Received</th></tr>
+              </thead>
+              <tbody id="dashBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Bottom 2-column cards -->
@@ -221,12 +261,14 @@
             <span class="card-title">Reports</span>
             <span style="font-size:12px;color:var(--text3)" id="issueCount"></span>
           </div>
-          <table>
-            <thead>
-              <tr><th>#</th><th>Issue Type</th><th>Priority</th><th>Description</th><th>Location</th><th>Photos</th><th>Status</th><th>Assigned</th><th>Timestamp</th><th></th></tr>
-            </thead>
-            <tbody id="issuesBody"></tbody>
-          </table>
+          <div class="issues-table-wrap">
+            <table class="issues-table">
+              <thead>
+                <tr><th>REPORT ID</th><th>Ward_No</th><th>Issue Type</th><th>Priority</th><th>Description</th><th>Location</th><th>Photos</th><th>Status</th><th>Assigned</th><th>Timestamp</th></tr>
+              </thead>
+              <tbody id="issuesBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div><!-- /issues -->
@@ -464,4 +506,3 @@
 
 </body>
 </html>
-
