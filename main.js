@@ -7,6 +7,8 @@
 
 import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInAnonymously }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, onSnapshot, doc, getDoc, updateDoc, query, orderBy, serverTimestamp, writeBatch }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -73,6 +75,10 @@ const FIRESTORE_COLLECTION = 'reports';
 const USERS_COLLECTION = 'users';
 const WARDS_COLLECTION = 'WARDS';
 const OFFICIALS_COLLECTION = 'OFFICIALS';
+
+
+// If your Firestore rules require `request.auth != null`, enable this (and enable Anonymous auth in Firebase Console).
+const ENABLE_ANON_AUTH = false;
 
 
 // ══════════════════════════════
@@ -768,10 +774,81 @@ async function runGeocodeQueue() {
 reports  = [];
 filtered = [];
 
+function describeFirestoreError(err, context = 'Firestore') {
+  const code = (err && typeof err === 'object' && 'code' in err) ? err.code : '';
+  const message = (err && typeof err === 'object' && 'message' in err) ? err.message : String(err || '');
+
+  // Common Firestore failure modes made human-readable.
+  if (code === 'permission-denied' || /permission[\s-]?denied/i.test(message)) {
+    const anonHint = ENABLE_ANON_AUTH
+      ? 'If this persists, your Firestore rules likely block anonymous users or your API key/project is restricted.'
+      : 'Set ENABLE_ANON_AUTH=true (main.js) and enable Anonymous sign-in in Firebase Console, or relax Firestore rules for reads.';
+    return `${context}: permission denied (Firestore rules blocked access). ${anonHint}`;
+  }
+  if (code === 'unauthenticated' || /unauthenticated/i.test(message)) {
+    return `${context}: unauthenticated (sign-in required by Firestore rules). Enable anonymous auth (main.js + Firebase Console) or use another sign-in method.`;
+  }
+  if (code === 'failed-precondition' && /index/i.test(message)) {
+    return `${context}: missing index (create the required Firestore index shown in console)`;
+  }
+  if (code === 'unavailable' || /offline|network|unavailable/i.test(message)) {
+    return `${context}: network/unavailable (check internet, VPN, firewall, or blocked gstatic/googleapis)`;
+  }
+  if (code) return `${context}: ${code}`;
+  if (message) return `${context}: ${message}`;
+  return `${context}: unknown error`;
+}
+
 async function connectFirebase() {
   try {
+    if (typeof location !== 'undefined' && location.protocol === 'file:') {
+      console.warn('[Firebase] Page opened via file://. Serve via http://localhost (Live Server, python -m http.server, etc.) to avoid opaque-origin/CORS issues.');
+      toast('Open this page via http://localhost (not file://) for Firebase to work reliably.', 'err');
+      // Firebase Auth/Firestore frequently fail on opaque origins (file://). Bail early to avoid confusing "blocked" errors.
+      db = null;
+      if (fbUnsub) fbUnsub();
+      if (supervisorsUnsub) supervisorsUnsub();
+      return;
+    }
+
     const existing = getApps();
     const app = existing.length ? existing[0] : initializeApp(FIREBASE_CONFIG, 'civic-portal');
+
+    // Auth diagnostics (permission-denied often means Firestore rules require auth).
+    const auth = getAuth(app);
+    onAuthStateChanged(auth, (user) => {
+      console.log('[Auth] state:', user ? { uid: user.uid, isAnonymous: user.isAnonymous } : 'signed out');
+    });
+    if (ENABLE_ANON_AUTH && !auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        console.log('[Auth] signed in anonymously');
+      } catch (err) {
+        console.error('[Auth] anonymous sign-in failed:', err);
+        const code = (err && typeof err === 'object' && 'code' in err) ? err.code : '';
+        if (code === 'auth/operation-not-allowed') {
+          toast('Firebase Auth: enable Anonymous sign-in (Console → Authentication → Sign-in method).', 'err');
+        } else if (code === 'auth/unauthorized-domain') {
+          toast('Firebase Auth: add this domain to Authorized domains (Console → Authentication → Settings).', 'err');
+        } else {
+          toast(`Firebase Auth: anonymous sign-in failed${code ? ` (${code})` : ''}`, 'err');
+        }
+        // If rules require auth, continuing will just surface "permission-denied" from Firestore.
+        db = null;
+        if (fbUnsub) fbUnsub();
+        if (supervisorsUnsub) supervisorsUnsub();
+        return;
+      }
+    }
+
+    if (ENABLE_ANON_AUTH && !auth.currentUser) {
+      toast('Firebase Auth: not signed in (anonymous sign-in did not complete). Firestore access will be blocked by rules.', 'err');
+      db = null;
+      if (fbUnsub) fbUnsub();
+      if (supervisorsUnsub) supervisorsUnsub();
+      return;
+    }
+
     db = getFirestore(app);
 
     if (fbUnsub) fbUnsub();
@@ -834,8 +911,9 @@ async function connectFirebase() {
         filtered = [...reports];
         refreshAll();
       },
-      () => {
-        toast('Firestore connection error', 'err');
+      (err) => {
+        console.error('[Firestore] reports onSnapshot error:', err);
+        toast(describeFirestoreError(err, 'Reports stream'), 'err');
       }
     );
 
@@ -856,12 +934,15 @@ async function connectFirebase() {
           .sort((a, b) => a.name.localeCompare(b.name));
         supervisors = list;
       },
-      () => {
+      (err) => {
+        console.error('[Firestore] users onSnapshot error:', err);
+        toast(describeFirestoreError(err, 'Users stream'), 'err');
         supervisors = [];
       }
     );
   } catch (e) {
-    toast('Firebase config error', 'err');
+    console.error('[Firebase] connectFirebase failed:', e);
+    toast(describeFirestoreError(e, 'Firebase init'), 'err');
   }
 }
 
