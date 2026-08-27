@@ -224,6 +224,11 @@ const Officials = () => {
 
   const doAction = (fn) => { fn(); setOpenMenuId(null); };
 
+  const totalCount = officialsList.length;
+  const availableCount = officialsList.filter(o => o.status === "Available").length;
+  const onTaskCount = officialsList.filter(o => o.status === "On Task").length;
+  const offlineCount = officialsList.filter(o => o.status === "Offline").length;
+
   return (
     <div className="app-layout">
       <Sidebar />
@@ -244,19 +249,19 @@ const Officials = () => {
 
           {/* ── Summary Cards ── */}
           <div className="stat-grid">
-            <StatCard label="TOTAL OFFICIALS" value="48"
+            <StatCard label="TOTAL OFFICIALS" value={loading ? "..." : totalCount.toString()}
               subtitle="Registered officials"
               icon={<UsersIcon />} iconBg="#eff6ff" iconColor="#3b82f6"
               trendIcon="↗" trendClass="" />
-            <StatCard label="AVAILABLE" value="21"
+            <StatCard label="AVAILABLE" value={loading ? "..." : availableCount.toString()}
               subtitle="Ready for assignment"
               icon={<CheckCircle />} iconBg="#f0fdf4" iconColor="#22c55e"
               trendIcon="✓" trendClass="" />
-            <StatCard label="ON TASK" value="19"
+            <StatCard label="ON TASK" value={loading ? "..." : onTaskCount.toString()}
               subtitle="Actively working"
               icon={<ClockIcon />} iconBg="#eff6ff" iconColor="#3b82f6"
               trendIcon="⚡" trendClass="" />
-            <StatCard label="OFFLINE" value="8"
+            <StatCard label="OFFLINE" value={loading ? "..." : offlineCount.toString()}
               subtitle="Currently unavailable"
               icon={<WifiOff />} iconBg="#f8fafc" iconColor="#64748b"
               trendIcon="—" trendClass="" />
@@ -424,7 +429,7 @@ const Officials = () => {
             {/* PAGINATION */}
             <div className="off-pagination">
               <span className="off-pagination-info">
-                Showing 1–{Math.min(filtered.length, 10)} of 48 officials
+                Showing 1–{Math.min(filtered.length, 10)} of {totalCount} officials
               </span>
               <div className="off-page-controls">
                 <button className="off-page-btn off-page-arrow"
