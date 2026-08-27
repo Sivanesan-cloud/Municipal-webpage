@@ -368,3 +368,160 @@ body {
 .action-btn:hover { background: var(--page-bg); transform: translateY(-1px); box-shadow: var(--shadow); }
 .action-btn.primary { background: #0f172a; color: white; border-color: #0f172a; }
 .action-btn.primary:hover { background: #1e293b; }
+
+/* ── COMPLAINT STATUS CARD ── */
+.cs-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.cs-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.cs-subtitle {
+  font-size: 11.5px;
+  color: var(--text-light);
+  margin-top: 3px;
+}
+
+.cs-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.cs-badge::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  display: inline-block;
+  animation: cs-pulse 2s infinite;
+}
+
+@keyframes cs-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.cs-chart-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0 16px;
+}
+
+.cs-donut-outer {
+  position: relative;
+  width: 210px;
+  height: 210px;
+}
+
+.cs-center-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.cs-center-num {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text-dark);
+  line-height: 1.1;
+}
+
+.cs-center-label {
+  font-size: 10px;
+  color: var(--text-light);
+  font-weight: 500;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.cs-legend {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  gap: 0;
+}
+
+.cs-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 2px;
+  border-bottom: 1px solid #f8fafc;
+  transition: background .1s;
+}
+
+.cs-legend-row:last-child { border-bottom: none; }
+.cs-legend-row:hover { background: #fafbfc; border-radius: 6px; }
+
+.cs-legend-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.cs-dot {
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.cs-legend-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-medium);
+}
+
+.cs-legend-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-legend-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dark);
+  min-width: 30px;
+  text-align: right;
+}
+
+.cs-legend-pct {
+  font-size: 11.5px;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+}

@@ -8,6 +8,7 @@ import {
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
+import ComplaintStatus from "../components/ComplaintStatus";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -163,30 +164,8 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Donut Chart */}
-            <div className="card status-card">
-              <div className="card-title" style={{ marginBottom: 4 }}>Status</div>
-              <div className="donut-wrapper">
-                <div style={{ position: "relative", height: 170, width: 170, margin: "0 auto" }}>
-                  <Doughnut data={donutData} options={donutOptions} />
-                  <div className="donut-center">
-                    <div className="donut-value">1.2k</div>
-                    <div className="donut-sub">Total</div>
-                  </div>
-                </div>
-              </div>
-              <div className="status-legend">
-                {statusItems.map(s => (
-                  <div key={s.label} className="status-legend-item">
-                    <div className="sli-left">
-                      <span className="legend-dot" style={{ background: s.color, borderRadius: "50%", width: 9, height: 9 }} />
-                      <span className="sli-label">{s.label}</span>
-                    </div>
-                    <span className="sli-pct">{s.pct} {s.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Complaint Status Card */}
+            <ComplaintStatus />
           </div>
 
           {/* Map Section */}
