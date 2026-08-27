@@ -118,18 +118,28 @@ const Dashboard = () => {
   const [activeFilter, setActiveFilter] = useState("This Month");
   const [activeView, setActiveView] = useState("Comfortable");
   const [complaintsList, setComplaintsList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchRecentComplaints = async () => {
+      setLoading(true);
       try {
         const list = await complaintService.getComplaints();
-        setComplaintsList(list.slice(0, 4));
+        setComplaintsList(list);
       } catch (error) {
         console.error("Failed to load dashboard complaints:", error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchRecentComplaints();
   }, []);
+
+  const totalIssues = complaintsList.length;
+  const pendingIssues = complaintsList.filter(c => c.status === "Pending").length;
+  const resolvedIssues = complaintsList.filter(c => c.status === "Resolved").length;
+  const highPriorityIssues = complaintsList.filter(c => c.priority === "High").length;
+  const recentComplaints = complaintsList.slice(0, 4);
 
   return (
     <div className="app-layout">
@@ -153,10 +163,10 @@ const Dashboard = () => {
 
           {/* Stat Cards */}
           <div className="stat-grid">
-            <StatCard label="TOTAL ISSUES"   value="1,245" subtitle="Reported this month"    icon={<DocIcon />}      iconBg="#eff6ff" iconColor="#3b82f6" trendIcon="↗" trendClass="" />
-            <StatCard label="PENDING ISSUES" value="342"   subtitle="Require attention"       icon={<HourglassIcon />} iconBg="#fff7ed" iconColor="#f97316" trendIcon="⚠" trendClass="warn" />
-            <StatCard label="RESOLVED ISSUES" value="705"  subtitle="Successfully completed"  icon={<CheckIcon />}    iconBg="#f0fdf4" iconColor="#22c55e" trendIcon="↗" trendClass="" />
-            <StatCard label="HIGH PRIORITY"  value="28"    subtitle="Need immediate action"   icon={<AlertIcon />}    iconBg="#fef2f2" iconColor="#ef4444" trendIcon="⚠" trendClass="urgent" urgent />
+            <StatCard label="TOTAL ISSUES"   value={loading ? "..." : totalIssues.toLocaleString()} subtitle="Reported this month"    icon={<DocIcon />}      iconBg="#eff6ff" iconColor="#3b82f6" trendIcon="↗" trendClass="" />
+            <StatCard label="PENDING ISSUES" value={loading ? "..." : pendingIssues.toLocaleString()}   subtitle="Require attention"       icon={<HourglassIcon />} iconBg="#fff7ed" iconColor="#f97316" trendIcon="⚠" trendClass="warn" />
+            <StatCard label="RESOLVED ISSUES" value={loading ? "..." : resolvedIssues.toLocaleString()}  subtitle="Successfully completed"  icon={<CheckIcon />}    iconBg="#f0fdf4" iconColor="#22c55e" trendIcon="↗" trendClass="" />
+            <StatCard label="HIGH PRIORITY"  value={loading ? "..." : highPriorityIssues.toLocaleString()}    subtitle="Need immediate action"   icon={<AlertIcon />}    iconBg="#fef2f2" iconColor="#ef4444" trendIcon="⚠" trendClass="urgent" urgent />
           </div>
 
           {/* Charts Row */}
@@ -181,7 +191,7 @@ const Dashboard = () => {
             </div>
 
             {/* Complaint Status Card */}
-            <ComplaintStatus />
+            <ComplaintStatus complaints={complaintsList} />
           </div>
 
           {/* Map Section */}
@@ -251,7 +261,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {complaintsList.map(c => (
+                {recentComplaints.map(c => (
                   <tr key={c.id}>
                     <td><span className="cid">{c.id}</span></td>
                     <td>{c.issue}</td>
@@ -265,7 +275,7 @@ const Dashboard = () => {
                 ))}
               </tbody>
             </table>
-            <div className="view-all" onClick={() => navigate("/complaints")} style={{ cursor: "pointer" }}>View All 1,245 Complaints</div>
+            <div className="view-all" onClick={() => navigate("/complaints")} style={{ cursor: "pointer" }}>View All {loading ? "..." : totalIssues.toLocaleString()} Complaints</div>
           </div>
 
           {/* Bottom Actions */}

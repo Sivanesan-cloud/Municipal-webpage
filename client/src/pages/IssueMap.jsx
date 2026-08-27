@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
+import complaintService from "../services/complaintService";
 
 /* ── CONSTANTS ── */
 const WARD_OPTIONS = Array.from({ length: 15 }, (_, i) => `Ward ${i + 1}`);
@@ -154,7 +155,7 @@ const getMarkerColor = (priority, status) => {
 };
 
 const IssueMap = () => {
-  const [pins, setPins] = useState(INITIAL_PINS);
+  const [pins, setPins] = useState([]);
   const [search, setSearch] = useState("");
   const [wardFilter, setWardFilter] = useState("");
   const [catFilter, setCatFilter] = useState("");
@@ -165,12 +166,73 @@ const IssueMap = () => {
   const [selectedPin, setSelectedPin] = useState(null);
   const [assigningPin, setAssigningPin] = useState(null);
   const [toastMsg, setToastMsg] = useState("");
+  const [loading, setLoading] = useState(true);
   
   // Assign modal state
   const [selectedOfficial, setSelectedOfficial] = useState("");
 
+  const fetchMapPins = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    try {
+      let list = await complaintService.getComplaints();
+      
+      // If collection is empty, seed it with the mock data so they have visual reports
+      if (list.length === 0) {
+        console.log("Firestore reports collection is empty. Seeding initial data...");
+        for (const item of INITIAL_PINS) {
+          const { id, ...cleanItem } = item;
+          await complaintService.createComplaint(cleanItem);
+        }
+        list = await complaintService.getComplaints();
+      }
+
+      // Helper to map coordinates deterministically based on ward and index
+      const getCoordinates = (ward, index) => {
+        const centers = {
+          "Ward 1": { x: 80, y: 60 },
+          "Ward 2": { x: 75, y: 180 },
+          "Ward 3": { x: 70, y: 310 },
+          "Ward 4": { x: 230, y: 65 },
+          "Ward 5": { x: 210, y: 190 },
+          "Ward 6": { x: 190, y: 320 },
+          "Ward 7": { x: 380, y: 70 },
+          "Ward 8": { x: 360, y: 200 },
+          "Ward 9": { x: 330, y: 320 },
+          "Ward 10": { x: 520, y: 80 },
+          "Ward 11": { x: 500, y: 210 },
+          "Ward 12": { x: 480, y: 330 },
+        };
+        const base = centers[ward] || { x: 250, y: 200 };
+        return {
+          x: base.x + ((index * 25) % 50) - 25,
+          y: base.y + ((index * 20) % 40) - 20
+        };
+      };
+
+      const mapped = list.map((p, idx) => {
+        const coords = getCoordinates(p.ward, idx);
+        return {
+          ...p,
+          x: p.x || coords.x,
+          y: p.y || coords.y
+        };
+      });
+
+      setPins(mapped);
+    } catch (error) {
+      console.error("Failed to load map pins:", error);
+      setPins(INITIAL_PINS);
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMapPins();
+  }, []);
+
   const handleApplyFilters = () => {
-    // Conceptual filter update
+    // Handled dynamically in filteredPins
   };
 
   const handleResetFilters = () => {
@@ -183,6 +245,7 @@ const IssueMap = () => {
   };
 
   const handleRefresh = () => {
+    fetchMapPins(true);
     setToastMsg("Map data refreshed.");
     setTimeout(() => setToastMsg(""), 3000);
   };
@@ -193,7 +256,7 @@ const IssueMap = () => {
     setSelectedOfficial(OFFICIALS[0]);
   };
 
-  const handleAssignConfirm = (e) => {
+  const handleAssignConfirm = async (e) => {
     e.preventDefault();
     setPins(prev => prev.map(p => {
       if (p.id === assigningPin.id) {
@@ -202,12 +265,18 @@ const IssueMap = () => {
       return p;
     }));
     
-    // Update selected pin preview if open
     if (selectedPin && selectedPin.id === assigningPin.id) {
       setSelectedPin(prev => ({ ...prev, official: selectedOfficial, status: "Assigned" }));
     }
 
-    setToastMsg("Official assigned successfully.");
+    try {
+      await complaintService.assignOfficial(assigningPin.id, selectedOfficial);
+      setToastMsg("Official assigned successfully.");
+    } catch (error) {
+      console.error("Failed to assign official in DB:", error);
+      fetchMapPins(false);
+    }
+
     setAssigningPin(null);
     setTimeout(() => setToastMsg(""), 3000);
   };
