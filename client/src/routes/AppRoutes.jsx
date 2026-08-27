@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "../pages/Dashboard";
 import Complaints from "../pages/Complaints";
+import IssueMap from "../pages/IssueMap";
 import Officials from "../pages/Officials";
 import Analytics from "../pages/Analytics";
 import Settings from "../pages/Settings";
@@ -12,6 +13,7 @@ const AppRoutes = () => (
       <Route path="/"           element={<Dashboard />} />
       <Route path="/dashboard"  element={<Dashboard />} />
       <Route path="/complaints" element={<Complaints />} />
+      <Route path="/issue-map"  element={<IssueMap />} />
       <Route path="/officials"  element={<Officials />} />
       <Route path="/analytics"  element={<Analytics />} />
       <Route path="/settings"   element={<Settings />} />

@@ -1658,3 +1658,331 @@ body {
   }
 }
 
+/* ── MUNICIPAL ISSUE MAP PAGE ── */
+.map-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  display: inline-block;
+  animation: map-pulse 2s infinite;
+}
+
+@keyframes map-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.map-time-label {
+  font-size: 11.5px;
+  color: var(--text-light);
+}
+
+/* Container */
+.map-box-container {
+  position: relative;
+  width: 100%;
+  height: 520px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.map-canvas-wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease-out;
+}
+
+.map-city-svg {
+  width: 100%;
+  height: 100%;
+  max-width: 780px;
+  max-height: 520px;
+}
+
+/* Ward Path styling */
+.map-ward-path {
+  stroke: #cbd5e1;
+  stroke-width: 1.5;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.map-ward-path:hover {
+  fill: #eff6ff;
+  stroke: var(--primary);
+}
+
+.map-ward-path.focused {
+  stroke: var(--primary);
+  stroke-width: 2.5;
+  fill: rgba(59, 130, 246, 0.06);
+}
+
+/* Labels */
+.map-ward-text-label {
+  font-size: 10px;
+  font-weight: 700;
+  fill: #64748b;
+  pointer-events: none;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: .02em;
+}
+
+/* Marker Pins */
+.map-marker-pin {
+  transition: all 0.15s ease-in-out;
+}
+
+.map-marker-pin:hover {
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));
+}
+
+.map-marker-pin.selected circle:first-child {
+  stroke-width: 3.5;
+  stroke: #0f172a;
+}
+
+/* Floating Cluster Bubble */
+.map-cluster-bubble {
+  position: absolute;
+  background: #3b82f6;
+  color: white;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid white;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* Floating Legend */
+.map-floating-legend {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mfl-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-light);
+  letter-spacing: .04em;
+  margin-bottom: 2px;
+}
+
+.mfl-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-medium);
+}
+
+.mfl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Floating Controls */
+.map-floating-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+}
+
+.map-floating-controls button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-medium);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: background .15s, color .15s;
+}
+
+.map-floating-controls button:hover {
+  background: var(--page-bg);
+  color: var(--text-dark);
+}
+
+/* Floating Detail Panel overlay */
+.map-detail-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  bottom: 16px;
+  width: 320px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.mdp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.mdp-id {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-dark);
+  background: var(--page-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.mdp-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-light);
+  padding: 2px;
+  display: flex;
+}
+.mdp-close:hover { color: var(--text-dark); }
+
+.mdp-body {
+  flex: 1;
+}
+
+.mdp-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 12px;
+}
+
+.mdp-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-medium);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.mdp-meta strong {
+  color: var(--text-dark);
+  font-weight: 600;
+}
+
+.mdp-img-wrap {
+  width: 100%;
+  height: 120px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.mdp-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mdp-no-img {
+  width: 100%;
+  height: 80px;
+  border-radius: var(--radius-xs);
+  border: 1px dashed var(--border);
+  background: #fafbfc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--text-light);
+  font-weight: 500;
+}
+
+.mdp-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+}
+
+/* Empty State overlay */
+.map-empty-state-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+
+/* Responsive map overrides */
+@media (max-width: 768px) {
+  .map-detail-panel {
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+    height: 190px;
+  }
+}
+
