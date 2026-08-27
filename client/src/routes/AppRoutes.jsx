@@ -1,13 +1,17 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "../pages/Dashboard";
+import Officials from "../pages/Officials";
 import Login from "../pages/Login";
 
 const AppRoutes = () => (
   <BrowserRouter>
     <Routes>
-      <Route path="/" element={<Dashboard />} />
+      <Route path="/"          element={<Dashboard />} />
       <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/officials" element={<Officials />} />
+      <Route path="/login"     element={<Login />} />
+      {/* Redirect unknown routes to dashboard */}
+      <Route path="*"          element={<Navigate to="/" replace />} />
     </Routes>
   </BrowserRouter>
 );
