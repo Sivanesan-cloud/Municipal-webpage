@@ -5,6 +5,7 @@ import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
 import AddOfficialModal from "../components/AddOfficialModal";
 import OfficialDetails from "../components/OfficialDetails";
+import officialService from "../services/officialService";
 
 /* ── CONSTANTS ── */
 const DEPARTMENTS = ["Roads", "Electrical", "Sanitation", "Water Supply", "Drainage"];
@@ -138,6 +139,68 @@ const Officials = () => {
   const [statusFilter, setStatusFilter]   = useState("");
   const [currentPage, setCurrentPage]     = useState(1);
 
+  const [officialsList, setOfficialsList] = useState([]);
+  const [loading, setLoading]             = useState(true);
+
+  const fetchOfficials = async () => {
+    setLoading(true);
+    try {
+      let list = await officialService.getOfficials();
+      // If collection is empty, seed it with the mock data so they have visual profiles
+      if (list.length === 0) {
+        console.log("Firestore officials collection is empty. Seeding initial data...");
+        for (const item of OFFICIALS) {
+          const { id, initials, ...cleanItem } = item;
+          await officialService.addOfficial(cleanItem);
+        }
+        list = await officialService.getOfficials();
+      }
+      
+      const mapped = list.map((o) => {
+        const name = o.name || "Assistant Engineer";
+        const initials = name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() || "AE";
+        const email = o.email || `${name.toLowerCase().replace(/\s+/g, ".")}@example.com`;
+        const phone = o.phone || "+91 98765 43210";
+        let department = o.department || "Roads";
+        let ward = o.ward || "Ward 1";
+        
+        // Dynamic department/ward naming fallback mapping
+        if (name.includes("WARD 1") || name.includes("AE01")) { ward = "Ward 1"; department = "Roads"; }
+        else if (name.includes("WARD 2") || name.includes("AE02")) { ward = "Ward 2"; department = "Sanitation"; }
+        else if (name.includes("WARD 3") || name.includes("AE03")) { ward = "Ward 3"; department = "Drainage"; }
+        else if (name.includes("WARD 4") || name.includes("AE04")) { ward = "Ward 4"; department = "Water Supply"; }
+        else if (name.includes("WARD 5") || name.includes("AE05")) { ward = "Ward 5"; department = "Roads"; }
+
+        return {
+          id: o.id,
+          name,
+          initials,
+          email,
+          phone,
+          department,
+          ward,
+          avatarColor: o.avatarColor || "#4f46e5",
+          activeTasks: o.assignedComplaints || o.activeTasks || 0,
+          completedTasks: o.completedComplaints || o.completedTasks || 15,
+          avgResolution: o.avgResolution || "2.4 days",
+          status: o.availability || o.status || "Available",
+          assignedComplaints: o.assignedComplaintsList || []
+        };
+      });
+
+      setOfficialsList(mapped);
+    } catch (error) {
+      console.error("Failed to load officials:", error);
+      setOfficialsList(OFFICIALS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOfficials();
+  }, []);
+
   /* Close dropdown on outside click */
   useEffect(() => {
     const close = () => setOpenMenuId(null);
@@ -146,7 +209,7 @@ const Officials = () => {
   }, []);
 
   /* Filtering */
-  const filtered = OFFICIALS.filter(o => {
+  const filtered = officialsList.filter(o => {
     const q = search.toLowerCase();
     if (q && !o.name.toLowerCase().includes(q) && !o.email.toLowerCase().includes(q)) return false;
     if (deptFilter && o.department !== deptFilter) return false;
@@ -388,7 +451,7 @@ const Officials = () => {
       </div>
 
       {/* Modals */}
-      {showAddModal && <AddOfficialModal onClose={() => setShowAddModal(false)} />}
+      {showAddModal && <AddOfficialModal onClose={() => setShowAddModal(false)} onAdd={fetchOfficials} />}
       {selectedOff  && <OfficialDetails official={selectedOff} onClose={() => setSelectedOff(null)} />}
     </div>
   );

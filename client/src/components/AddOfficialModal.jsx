@@ -1,4 +1,5 @@
 import { useState } from "react";
+import officialService from "../services/officialService";
 
 const DEPARTMENTS = ["Roads", "Electrical", "Sanitation", "Water Supply", "Drainage"];
 const WARDS = Array.from({ length: 12 }, (_, i) => `Ward ${i + 1}`);
@@ -9,18 +10,36 @@ const CloseIcon = () => (
   </svg>
 );
 
-const AddOfficialModal = ({ onClose }) => {
+const AddOfficialModal = ({ onClose, onAdd }) => {
   const [form, setForm] = useState({
     fullName: "", email: "", phone: "", department: "", ward: "", password: "",
   });
   const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const set = (e) => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: wire to API
-    onClose();
+    setLoading(true);
+    try {
+      await officialService.addOfficial({
+        name: form.fullName,
+        email: form.email,
+        phone: form.phone,
+        department: form.department,
+        ward: form.ward
+      });
+      if (typeof onAdd === "function") {
+        onAdd();
+      }
+      onClose();
+    } catch (error) {
+      console.error("Failed to add official:", error);
+      alert("Failed to add official to database.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -92,7 +111,9 @@ const AddOfficialModal = ({ onClose }) => {
 
           <div className="modal-footer">
             <button type="button" className="btn-cancel" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-submit">Add Official</button>
+            <button type="submit" className="btn-submit" disabled={loading}>
+              {loading ? "Adding..." : "Add Official"}
+            </button>
           </div>
         </form>
       </div>

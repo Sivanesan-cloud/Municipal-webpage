@@ -44,7 +44,19 @@ export const complaintService = {
       }
 
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        let formattedDate = data.date || "Oct 24, 2023";
+        if (data.reportedDate && typeof data.reportedDate.toDate === "function") {
+          const dt = data.reportedDate.toDate();
+          formattedDate = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        }
+        return {
+          id: doc.id,
+          ...data,
+          date: formattedDate
+        };
+      });
     } catch (error) {
       console.error("ComplaintService.getComplaints failed:", error);
       // Fallback placeholder during setup

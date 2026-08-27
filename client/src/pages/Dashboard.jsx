@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bar, Doughnut } from "react-chartjs-2";
 import {
@@ -10,6 +10,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
 import ComplaintStatus from "../components/ComplaintStatus";
+import complaintService from "../services/complaintService";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -116,6 +117,19 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState("This Month");
   const [activeView, setActiveView] = useState("Comfortable");
+  const [complaintsList, setComplaintsList] = useState([]);
+
+  useEffect(() => {
+    const fetchRecentComplaints = async () => {
+      try {
+        const list = await complaintService.getComplaints();
+        setComplaintsList(list.slice(0, 4));
+      } catch (error) {
+        console.error("Failed to load dashboard complaints:", error);
+      }
+    };
+    fetchRecentComplaints();
+  }, []);
 
   return (
     <div className="app-layout">
@@ -237,7 +251,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {complaints.map(c => (
+                {complaintsList.map(c => (
                   <tr key={c.id}>
                     <td><span className="cid">{c.id}</span></td>
                     <td>{c.issue}</td>
@@ -246,7 +260,7 @@ const Dashboard = () => {
                     <td><span className={`badge ${priorityMap[c.priority]}`}>{c.priority}</span></td>
                     <td><span className={`badge ${statusMap[c.status]}`}>{c.status}</span></td>
                     <td>{c.date}</td>
-                    <td><button className="review-btn">Review</button></td>
+                    <td><button className="review-btn" onClick={() => navigate("/complaints")}>Review</button></td>
                   </tr>
                 ))}
               </tbody>

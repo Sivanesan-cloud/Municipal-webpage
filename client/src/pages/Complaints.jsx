@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
+import complaintService from "../services/complaintService";
 
 /* ── CONSTANTS & OPTIONS ── */
 const STATUS_OPTIONS = ["All Status", "Pending", "Assigned", "In Progress", "Resolved"];
@@ -174,7 +175,7 @@ const CloseIcon = () => (
 );
 
 const Complaints = () => {
-  const [complaintsList, setComplaintsList] = useState(INITIAL_COMPLAINTS);
+  const [complaintsList, setComplaintsList] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [catFilter, setCatFilter] = useState("All Categories");
@@ -185,7 +186,7 @@ const Complaints = () => {
 
   const [view, setView] = useState("table");
   const [sort, setSort] = useState("Newest");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Modals / Dropdowns
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -194,6 +195,34 @@ const Complaints = () => {
   const [rowMenuId, setRowMenuId] = useState(null);
 
   const exportRef = useRef(null);
+
+  /* Load live data from Firestore reports collection */
+  const fetchComplaints = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    try {
+      let list = await complaintService.getComplaints();
+      // If collection is empty, seed it with the mock data so the user has visual reports
+      if (list.length === 0) {
+        console.log("Firestore reports collection is empty. Seeding initial data...");
+        for (const item of INITIAL_COMPLAINTS) {
+          const { id, ...cleanItem } = item; // firebase auto-assigns document ids
+          await complaintService.createComplaint(cleanItem);
+        }
+        list = await complaintService.getComplaints();
+      }
+      setComplaintsList(list);
+    } catch (error) {
+      console.error("Failed to load complaints from database:", error);
+      // Fallback
+      setComplaintsList(INITIAL_COMPLAINTS);
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchComplaints();
+  }, []);
 
   /* Close row menus or export menus on click outside */
   useEffect(() => {
@@ -244,20 +273,18 @@ const Complaints = () => {
   };
 
   const handleSimulateLoading = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-    }, 850);
+    fetchComplaints(true);
   };
 
   // Row Action operations
-  const handleStatusChange = (id, newStatus) => {
+  const handleStatusChange = async (id, newStatus) => {
+    // Optimistic UI update
     setComplaintsList((prev) =>
       prev.map((c) => {
         if (c.id === id) {
           const updatedTimeline = [
             ...c.timeline,
-            { status: newStatus, date: "Oct 27, 2023 09:30 PM", remark: `Status changed to ${newStatus} by admin.` }
+            { status: newStatus, date: new Date().toLocaleString(), remark: `Status changed to ${newStatus} by admin.` }
           ];
           return { ...c, status: newStatus, timeline: updatedTimeline };
         }
@@ -270,20 +297,34 @@ const Complaints = () => {
         status: newStatus,
         timeline: [
           ...prev.timeline,
-          { status: newStatus, date: "Oct 27, 2023 09:30 PM", remark: `Status changed to ${newStatus} by admin.` }
+          { status: newStatus, date: new Date().toLocaleString(), remark: `Status changed to ${newStatus} by admin.` }
         ]
       }));
     }
+
+    try {
+      await complaintService.updateComplaintStatus(id, newStatus);
+    } catch (error) {
+      console.error("Failed to update status in DB:", error);
+      fetchComplaints(false); // Rollback on error
+    }
   };
 
-  const handlePriorityChange = (id, newPri) => {
+  const handlePriorityChange = async (id, newPri) => {
     setComplaintsList((prev) => prev.map((c) => (c.id === id ? { ...c, priority: newPri } : c)));
     if (reviewedComplaint && reviewedComplaint.id === id) {
       setReviewedComplaint(prev => ({ ...prev, priority: newPri }));
     }
+
+    try {
+      await complaintService.updateComplaintPriority(id, newPri);
+    } catch (error) {
+      console.error("Failed to update priority in DB:", error);
+      fetchComplaints(false);
+    }
   };
 
-  const handleAssignOfficial = (id, officialName) => {
+  const handleAssignOfficial = async (id, officialName) => {
     const isAssign = officialName !== "Unassigned";
     const status = isAssign ? "Assigned" : "Pending";
     setComplaintsList((prev) =>
@@ -291,7 +332,7 @@ const Complaints = () => {
         if (c.id === id) {
           const updatedTimeline = [
             ...c.timeline,
-            { status, date: "Oct 27, 2023 09:30 PM", remark: isAssign ? `Assigned to field official ${officialName}` : "Unassigned official" }
+            { status, date: new Date().toLocaleString(), remark: isAssign ? `Assigned to field official ${officialName}` : "Unassigned official" }
           ];
           return { ...c, official: officialName, status, timeline: updatedTimeline };
         }
@@ -305,36 +346,41 @@ const Complaints = () => {
         status,
         timeline: [
           ...prev.timeline,
-          { status, date: "Oct 27, 2023 09:30 PM", remark: isAssign ? `Assigned to field official ${officialName}` : "Unassigned official" }
+          { status, date: new Date().toLocaleString(), remark: isAssign ? `Assigned to field official ${officialName}` : "Unassigned official" }
         ]
       }));
+    }
+
+    try {
+      await complaintService.assignOfficial(id, officialName);
+    } catch (error) {
+      console.error("Failed to assign official in DB:", error);
+      fetchComplaints(false);
     }
   };
 
   // Add new complaint
-  const handleCreateComplaint = (newComp) => {
-    const fresh = {
-      id: `CMP-${complaintsList.length + 1020}`,
-      issue: newComp.issue,
-      location: newComp.location,
-      category: newComp.category,
-      ward: newComp.ward,
-      priority: newComp.priority,
-      status: newComp.official !== "Unassigned" ? "Assigned" : "Pending",
-      date: "Oct 27, 2023",
-      official: newComp.official,
-      desc: newComp.desc || "No detailed description provided.",
-      gps: "11.0180° N, 76.9510° E",
-      timeline: [
-        { status: "Pending", date: "Oct 27, 2023 09:20 PM", remark: "Complaint registered by Admin." }
-      ],
-      img: ""
-    };
-    if (newComp.official !== "Unassigned") {
-      fresh.timeline.push({ status: "Assigned", date: "Oct 27, 2023 09:20 PM", remark: `Assigned to ${newComp.official}` });
+  const handleCreateComplaint = async (newComp) => {
+    try {
+      const fresh = {
+        issue: newComp.issue,
+        location: newComp.location,
+        category: newComp.category,
+        ward: newComp.ward,
+        priority: newComp.priority,
+        official: newComp.official,
+        desc: newComp.desc || "No detailed description provided.",
+        gps: "11.0180° N, 76.9510° E",
+        img: ""
+      };
+      
+      await complaintService.createComplaint(fresh);
+      setShowCreateModal(false);
+      fetchComplaints(true); // Reload list
+    } catch (error) {
+      console.error("Failed to save new complaint:", error);
+      alert("Error saving complaint to database. Please check your credentials.");
     }
-    setComplaintsList([fresh, ...complaintsList]);
-    setShowCreateModal(false);
   };
 
   return (
