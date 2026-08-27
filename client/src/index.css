@@ -1986,3 +1986,198 @@ body {
   }
 }
 
+/* ── ASSIGN OFFICIALS PAGE ── */
+.ao-workspace-grid {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.ao-col-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-light);
+  letter-spacing: .06em;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.scrollable-list {
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar */
+.scrollable-list::-webkit-scrollbar {
+  width: 5px;
+}
+.scrollable-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollable-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+/* Unassigned Complaint Items */
+.ao-complaint-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ao-complaint-item:hover {
+  background: var(--page-bg);
+  border-color: var(--text-light);
+}
+
+.ao-complaint-item.active {
+  border-color: var(--primary);
+  background: #f0f6ff;
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.ao-item-id {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--primary);
+  background: #eff6ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ao-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 6px 0 4px;
+}
+
+.ao-item-meta {
+  font-size: 11px;
+  color: var(--text-light);
+}
+
+/* Selected Preview */
+.ao-preview-box {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.ao-preview-title {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-light);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Official Cards list */
+.ao-officials-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.ao-official-card-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: white;
+  transition: box-shadow 0.15s ease;
+}
+
+.ao-official-card-item:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.ao-off-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ao-off-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.ao-off-dept {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-top: 1px;
+}
+
+/* Workload Progress slider */
+.ao-off-workload {
+  margin-bottom: 10px;
+}
+
+.ao-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: var(--page-bg);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 5px;
+}
+
+.ao-progress-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+/* Matching Indicator */
+.ao-matching-indicators {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+
+.ao-match-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #16a34a;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 4px;
+}
+
+.ao-match-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ao-match-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #15803d;
+}
+
+/* Responsive workspace */
+@media (max-width: 900px) {
+  .ao-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
