@@ -2416,3 +2416,165 @@ body {
   }
 }
 
+/* ── SEARCHABLE WARD FILTER DROPDOWN ── */
+.ward-select-container {
+  position: relative;
+  display: inline-block;
+}
+
+.ward-select-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+}
+
+.ward-select-dropdown {
+  position: absolute;
+  left: 0;
+  top: 38px;
+  min-width: 240px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.1s ease;
+}
+
+.ward-search-wrap {
+  position: relative;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  background: white;
+}
+
+.ward-search-lens {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  color: var(--text-light);
+  pointer-events: none;
+}
+
+.ward-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 26px !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: 12.5px;
+  outline: none;
+  font-family: inherit;
+  color: var(--text-dark);
+  background: var(--page-bg);
+  transition: all 0.15s ease;
+}
+
+.ward-search-input:focus {
+  border-color: var(--primary);
+  background: white;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.ward-search-clear {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-light);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+.ward-search-clear:hover {
+  color: var(--text-dark);
+}
+
+.ward-list-scrollable {
+  max-height: 312px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+/* Custom scrollbar */
+.ward-list-scrollable::-webkit-scrollbar {
+  width: 5px;
+}
+.ward-list-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ward-list-scrollable::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.ward-option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text-medium);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all 0.1s ease;
+}
+
+.ward-option-item:hover,
+.ward-option-item.focused {
+  background: var(--page-bg);
+  color: var(--text-dark);
+}
+
+.ward-option-item.active {
+  background: #eff6ff;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.ward-no-results {
+  padding: 16px 12px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-medium);
+  line-height: 1.5;
+}
+
+/* Dropdown alignment constraint */
+@media (max-width: 640px) {
+  .ward-select-dropdown {
+    width: 100%;
+    min-width: 100%;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+    max-width: calc(100% - 24px);
+    border-radius: var(--radius);
+  }
+}
+
+

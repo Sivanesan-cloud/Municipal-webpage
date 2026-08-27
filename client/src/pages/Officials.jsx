@@ -6,6 +6,7 @@ import StatusBadge from "../components/StatusBadge";
 import AddOfficialModal from "../components/AddOfficialModal";
 import OfficialDetails from "../components/OfficialDetails";
 import officialService from "../services/officialService";
+import WardSelect from "../components/WardSelect";
 
 /* ── CONSTANTS ── */
 const DEPARTMENTS = ["Roads", "Electrical", "Sanitation", "Water Supply", "Drainage"];
@@ -282,10 +283,7 @@ const Officials = () => {
                 <option value="">Department ▾</option>
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
-              <select className="off-filter-select" value={wardFilter} onChange={e => setWardFilter(e.target.value)}>
-                <option value="">Ward ▾</option>
-                {WARDS.map(w => <option key={w} value={w}>{w}</option>)}
-              </select>
+              <WardSelect value={wardFilter} onChange={setWardFilter} />
               <select className="off-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                 <option value="">Status ▾</option>
                 <option value="Available">Available</option>
