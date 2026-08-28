@@ -546,6 +546,19 @@ body {
 }
 .btn-add:hover { background: #2563eb; transform: translateY(-1px); }
 
+.btn-assign-officials {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px;
+  background: white; color: var(--primary);
+  border: 1.5px solid var(--primary); border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif;
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s, color .15s, transform .15s;
+}
+.btn-assign-officials:hover {
+  background: #eff6ff; transform: translateY(-1px);
+}
+
 /* Filter Bar */
 .off-filter-bar {
   display: flex; align-items: center; gap: 10px;
@@ -699,6 +712,7 @@ body {
 .off-page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
 .off-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .off-page-arrow { padding: 0 12px; font-size: 12px; font-weight: 500; min-width: auto; }
+.off-page-ellipsis { padding: 0 4px; font-size: 13px; color: var(--text-medium); user-select: none; }
 
 /* Cards View */
 .off-cards-grid {

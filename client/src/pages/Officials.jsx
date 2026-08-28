@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
@@ -130,6 +131,7 @@ const GridIcon = () => (
 
 /* ── COMPONENT ── */
 const Officials = () => {
+  const navigate                          = useNavigate();
   const [view, setView]                   = useState("table");
   const [showAddModal, setShowAddModal]   = useState(false);
   const [selectedOff, setSelectedOff]     = useState(null);
@@ -209,26 +211,41 @@ const Officials = () => {
     return () => document.removeEventListener("click", close);
   }, []);
 
-  /* Filtering */
-  const filtered = officialsList.filter(o => {
-    const q = search.toLowerCase();
-    if (q && !o.name.toLowerCase().includes(q) && !o.email.toLowerCase().includes(q)) return false;
-    if (deptFilter && o.department !== deptFilter) return false;
-    if (wardFilter && o.ward !== wardFilter) return false;
-    if (statusFilter && o.status !== statusFilter) return false;
-    return true;
-  });
+  /* Filtering + Sorting */
+  const filtered = officialsList
+    .filter(o => {
+      const q = search.toLowerCase();
+      if (q && !o.name.toLowerCase().includes(q) && !o.email.toLowerCase().includes(q)) return false;
+      if (deptFilter && o.department !== deptFilter) return false;
+      if (wardFilter && o.ward !== wardFilter) return false;
+      if (statusFilter && o.status !== statusFilter) return false;
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)); // ascending A→Z
 
-  const resetFilters = () => { setSearch(""); setDeptFilter(""); setWardFilter(""); setStatusFilter(""); };
+  /* Pagination */
+  const PAGE_SIZE   = 10;
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage    = Math.min(currentPage, totalPages);
+  const startIdx    = (safePage - 1) * PAGE_SIZE;
+  const paginated   = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+  const resetFilters = () => {
+    setSearch(""); setDeptFilter(""); setWardFilter(""); setStatusFilter("");
+    setCurrentPage(1);
+  };
+
+  /* Reset to page 1 whenever a filter changes */
+  useEffect(() => { setCurrentPage(1); }, [search, deptFilter, wardFilter, statusFilter]);
 
   const openMenu = (e, id) => { e.stopPropagation(); setOpenMenuId(p => p === id ? null : id); };
 
   const doAction = (fn) => { fn(); setOpenMenuId(null); };
 
-  const totalCount = officialsList.length;
+  const totalCount    = officialsList.length;
   const availableCount = officialsList.filter(o => o.status === "Available").length;
-  const onTaskCount = officialsList.filter(o => o.status === "On Task").length;
-  const offlineCount = officialsList.filter(o => o.status === "Offline").length;
+  const onTaskCount   = officialsList.filter(o => o.status === "On Task").length;
+  const offlineCount  = officialsList.filter(o => o.status === "Offline").length;
 
   return (
     <div className="app-layout">
@@ -243,9 +260,17 @@ const Officials = () => {
               <h1 className="dashboard-title">Officials</h1>
               <p className="dashboard-subtitle">Manage municipal field officials, departments, wards and assignments.</p>
             </div>
-            <button className="btn-add" onClick={() => setShowAddModal(true)}>
-              <PlusIcon /> Add Official
-            </button>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button className="btn-assign-officials" onClick={() => navigate("/officials/assign")}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                Assign Official
+              </button>
+              <button className="btn-add" onClick={() => setShowAddModal(true)}>
+                <PlusIcon /> Add Official
+              </button>
+            </div>
           </div>
 
           {/* ── Summary Cards ── */}
@@ -329,9 +354,9 @@ const Officials = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.length === 0 ? (
+                    {paginated.length === 0 ? (
                       <tr><td colSpan={7} className="off-no-results">No officials match the current filters.</td></tr>
-                    ) : filtered.map(o => {
+                    ) : paginated.map(o => {
                       const dc = DEPT_COLORS[o.department] ?? { bg: "#f1f5f9", color: "#475569" };
                       return (
                         <tr key={o.id}>
@@ -393,9 +418,9 @@ const Officials = () => {
             {/* CARDS VIEW */}
             {view === "cards" && (
               <div className="off-cards-grid">
-                {filtered.length === 0
+                {paginated.length === 0
                   ? <div className="off-no-results" style={{ gridColumn: "1/-1" }}>No officials match the current filters.</div>
-                  : filtered.map(o => {
+                  : paginated.map(o => {
                     const dc = DEPT_COLORS[o.department] ?? { bg: "#f1f5f9", color: "#475569" };
                     return (
                       <div key={o.id} className="official-card">
@@ -427,23 +452,52 @@ const Officials = () => {
             {/* PAGINATION */}
             <div className="off-pagination">
               <span className="off-pagination-info">
-                Showing 1–{Math.min(filtered.length, 10)} of {totalCount} officials
+                Showing {filtered.length === 0 ? 0 : startIdx + 1}–{Math.min(startIdx + PAGE_SIZE, filtered.length)} of {filtered.length} officials
               </span>
               <div className="off-page-controls">
                 <button className="off-page-btn off-page-arrow"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => p - 1)}>
+                  disabled={safePage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
                   ← Previous
                 </button>
-                {[1, 2, 3, 4, 5].map(p => (
-                  <button key={p}
-                    className={`off-page-btn ${currentPage === p ? "active" : ""}`}
-                    onClick={() => setCurrentPage(p)}>{p}
-                  </button>
-                ))}
+
+                {/* Windowed page numbers: first, ...gap, current±2, ...gap, last */}
+                {(() => {
+                  const pages = [];
+                  const delta = 2;
+                  const left  = Math.max(2, safePage - delta);
+                  const right = Math.min(totalPages - 1, safePage + delta);
+
+                  // Always show page 1
+                  pages.push(1);
+
+                  // Left ellipsis
+                  if (left > 2) pages.push("...");
+
+                  // Middle window
+                  for (let p = left; p <= right; p++) pages.push(p);
+
+                  // Right ellipsis
+                  if (right < totalPages - 1) pages.push("...");
+
+                  // Always show last page (if more than 1 page)
+                  if (totalPages > 1) pages.push(totalPages);
+
+                  return pages.map((p, i) =>
+                    p === "..." ? (
+                      <span key={`ellipsis-${i}`} className="off-page-ellipsis">…</span>
+                    ) : (
+                      <button key={p}
+                        className={`off-page-btn ${safePage === p ? "active" : ""}`}
+                        onClick={() => setCurrentPage(p)}>{p}
+                      </button>
+                    )
+                  );
+                })()}
+
                 <button className="off-page-btn off-page-arrow"
-                  disabled={currentPage === 5}
-                  onClick={() => setCurrentPage(p => p + 1)}>
+                  disabled={safePage === totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
                   Next →
                 </button>
               </div>
