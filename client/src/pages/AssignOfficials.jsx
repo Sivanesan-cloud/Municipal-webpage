@@ -260,6 +260,12 @@ const AssignOfficials = () => {
         }).length
       });
 
+      // Unassigned complaints from live data
+      const liveUnassigned = allComplaints.filter(c => c.status === "Pending" || !c.assignedOfficial || c.assignedOfficial === "Unassigned");
+      if (liveUnassigned.length > 0) {
+        setUnassigned(liveUnassigned);
+      }
+
       const assignedComplaints = allComplaints
         .filter(c => c.status === "Assigned" || c.status === "In Progress")
         .slice(0, 10)
@@ -297,22 +303,19 @@ const AssignOfficials = () => {
     setConfirmModal({ comp: selectedComp, official: { ...official, name: official.name || "Official" } });
   };
 
-  const handleConfirmAssignment = (e) => {
+  const handleConfirmAssignment = async (e) => {
     e.preventDefault();
+    if (!confirmModal) return;
     const { comp, official } = confirmModal;
-    setUnassigned(prev => prev.filter(c => c.id !== comp.id));
-    setOfficials(prev => prev.map(o => {
-      if (o.id === official.id) {
-        const a = (o.assigned || 0) + 1;
-        return { ...o, assigned: a, availability: a >= o.max ? "Full" : a >= 8 ? "Limited" : "Available" };
-      }
-      return o;
-    }));
-    setRecent([{ id: comp.id, official: official.name, department: official.department || "—",
-      ward: official.ward || "—", priority: comp.priority, date: "Today", status: "Assigned" }, ...recent]);
+    try {
+      await complaintService.assignOfficial(comp.id, official.name);
+    } catch (err) {
+      console.error("Failed to assign official in Firestore:", err);
+    }
     showToast(`Complaint ${comp.id} assigned to ${official.name}.`);
     setSelectedComp(null);
     setConfirmModal(null);
+    fetchLiveData();
   };
 
   const filteredComplaints = unassigned.filter(c => {

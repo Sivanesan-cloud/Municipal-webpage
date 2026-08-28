@@ -15,6 +15,13 @@ const DATE_OPTIONS = ["All Dates", "Today", "Yesterday", "Last 7 Days", "Last 30
 const OFFICIALS = ["Unassigned", "Raj Kumar", "Arun Kumar", "Karthik", "Ravi Kumar", "Suresh"];
 
 /* ── DEFAULTS ── */
+const today = new Date();
+const formatDateOffset = (daysAgo) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() - daysAgo);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
 const INITIAL_COMPLAINTS = [
   {
     id: "CMP-1024",
@@ -24,14 +31,14 @@ const INITIAL_COMPLAINTS = [
     ward: "Ward 5",
     priority: "High",
     status: "Pending",
-    date: "Oct 24, 2023",
+    date: formatDateOffset(0),
     official: "Unassigned",
     desc: "A very deep and dangerous pothole has formed in the middle of Main Street near the intersection. It poses a high risk to motorcyclists and has already caused several near-miss accidents.",
     gps: "11.0168° N, 76.9558° E",
     timeline: [
-      { status: "Pending", date: "Oct 24, 2023 10:15 AM", remark: "Complaint submitted by citizen Anita R." }
+      { status: "Pending", date: `${formatDateOffset(0)} 10:15 AM`, remark: "Complaint submitted by citizen Anita R." }
     ],
-    img: "https://images.unsplash.com/photo-1515162305285-0293e4767cc2?w=500&auto=format&fit=crop&q=60" // placeholder for potholes
+    img: "https://images.unsplash.com/photo-1515162305285-0293e4767cc2?w=500&auto=format&fit=crop&q=60"
   },
   {
     id: "CMP-1023",
@@ -41,13 +48,13 @@ const INITIAL_COMPLAINTS = [
     ward: "Ward 12",
     priority: "Low",
     status: "Assigned",
-    date: "Oct 23, 2023",
+    date: formatDateOffset(1),
     official: "Arun Kumar",
     desc: "The street lamp at the junction of 12th Cross has been flickering for a week and has now completely shut down. The area is extremely dark at night.",
     gps: "11.0201° N, 76.9612° E",
     timeline: [
-      { status: "Pending", date: "Oct 23, 2023 08:30 AM", remark: "Complaint submitted by citizen Rajesh K." },
-      { status: "Assigned", date: "Oct 23, 2023 11:00 AM", remark: "Assigned to field official Arun Kumar" }
+      { status: "Pending", date: `${formatDateOffset(1)} 08:30 AM`, remark: "Complaint submitted by citizen Rajesh K." },
+      { status: "Assigned", date: `${formatDateOffset(1)} 11:00 AM`, remark: "Assigned to field official Arun Kumar" }
     ],
     img: ""
   },
@@ -59,14 +66,14 @@ const INITIAL_COMPLAINTS = [
     ward: "Ward 2",
     priority: "Medium",
     status: "In Progress",
-    date: "Oct 22, 2023",
+    date: formatDateOffset(2),
     official: "Karthik",
     desc: "Large pile of household and organic waste has accumulated at the corner of Market Road. It has not been cleared for three days and is emitting a foul smell.",
     gps: "11.0112° N, 76.9451° E",
     timeline: [
-      { status: "Pending", date: "Oct 22, 2023 09:00 AM", remark: "Complaint submitted by citizen Muthu S." },
-      { status: "Assigned", date: "Oct 22, 2023 10:45 AM", remark: "Assigned to field official Karthik" },
-      { status: "In Progress", date: "Oct 22, 2023 02:30 PM", remark: "Karthik started clearing operations" }
+      { status: "Pending", date: `${formatDateOffset(2)} 09:00 AM`, remark: "Complaint submitted by citizen Muthu S." },
+      { status: "Assigned", date: `${formatDateOffset(2)} 10:45 AM`, remark: "Assigned to field official Karthik" },
+      { status: "In Progress", date: `${formatDateOffset(2)} 02:30 PM`, remark: "Karthik started clearing operations" }
     ],
     img: ""
   },
@@ -78,15 +85,15 @@ const INITIAL_COMPLAINTS = [
     ward: "Ward 9",
     priority: "High",
     status: "Resolved",
-    date: "Oct 20, 2023",
+    date: formatDateOffset(3),
     official: "Ravi Kumar",
     desc: "A drinking water main pipeline is leaking heavily near the entrance of the public park. Thousands of liters of water are being wasted.",
     gps: "11.0255° N, 76.9701° E",
     timeline: [
-      { status: "Pending", date: "Oct 20, 2023 07:15 AM", remark: "Complaint submitted by citizen Priya M." },
-      { status: "Assigned", date: "Oct 20, 2023 08:00 AM", remark: "Assigned to field official Ravi Kumar" },
-      { status: "In Progress", date: "Oct 20, 2023 09:30 AM", remark: "Repair team arrived and isolated leakage" },
-      { status: "Resolved", date: "Oct 20, 2023 04:00 PM", remark: "Pipeline patch completed and tested by Ravi Kumar" }
+      { status: "Pending", date: `${formatDateOffset(3)} 07:15 AM`, remark: "Complaint submitted by citizen Priya M." },
+      { status: "Assigned", date: `${formatDateOffset(3)} 08:00 AM`, remark: "Assigned to field official Ravi Kumar" },
+      { status: "In Progress", date: `${formatDateOffset(3)} 09:30 AM`, remark: "Repair team arrived and isolated leakage" },
+      { status: "Resolved", date: `${formatDateOffset(3)} 04:00 PM`, remark: "Pipeline patch completed and tested by Ravi Kumar" }
     ],
     img: ""
   },
@@ -98,13 +105,13 @@ const INITIAL_COMPLAINTS = [
     ward: "Ward 7",
     priority: "Medium",
     status: "Assigned",
-    date: "Oct 19, 2023",
+    date: formatDateOffset(4),
     official: "Suresh",
     desc: "Concrete paving blocks have come loose on the walkway directly in front of the school gate. Children are tripping over them.",
     gps: "11.0182° N, 76.9504° E",
     timeline: [
-      { status: "Pending", date: "Oct 19, 2023 01:20 PM", remark: "Complaint submitted by school admin." },
-      { status: "Assigned", date: "Oct 19, 2023 04:00 PM", remark: "Assigned to field official Suresh" }
+      { status: "Pending", date: `${formatDateOffset(4)} 01:20 PM`, remark: "Complaint submitted by school admin." },
+      { status: "Assigned", date: `${formatDateOffset(4)} 04:00 PM`, remark: "Assigned to field official Suresh" }
     ],
     img: ""
   },
@@ -116,12 +123,12 @@ const INITIAL_COMPLAINTS = [
     ward: "Ward 3",
     priority: "High",
     status: "Pending",
-    date: "Oct 18, 2023",
+    date: formatDateOffset(5),
     official: "Unassigned",
     desc: "The open storm drain is completely blocked with plastic waste and silt, causing wastewater to overflow onto the pedestrian path.",
     gps: "11.0133° N, 76.9422° E",
     timeline: [
-      { status: "Pending", date: "Oct 18, 2023 11:45 AM", remark: "Complaint submitted by vendor association." }
+      { status: "Pending", date: `${formatDateOffset(5)} 11:45 AM`, remark: "Complaint submitted by vendor association." }
     ],
     img: ""
   }
@@ -423,7 +430,7 @@ const Complaints = () => {
               <div className="scc-icon" style={{ background: "#eff6ff", color: "#3b82f6" }}><FolderIcon /></div>
               <div>
                 <div className="scc-label">TOTAL COMPLAINTS</div>
-                <div className="scc-value">1,245</div>
+                <div className="scc-value">{loading ? "..." : complaintsList.length.toLocaleString()}</div>
                 <div className="scc-meta">All reported issues</div>
               </div>
             </div>
@@ -431,7 +438,7 @@ const Complaints = () => {
               <div className="scc-icon" style={{ background: "#fff7ed", color: "#d97706" }}><ClockIcon /></div>
               <div>
                 <div className="scc-label">PENDING</div>
-                <div className="scc-value">342</div>
+                <div className="scc-value">{loading ? "..." : complaintsList.filter(c => c.status === "Pending").length.toLocaleString()}</div>
                 <div className="scc-meta">Require attention</div>
               </div>
             </div>
@@ -439,7 +446,7 @@ const Complaints = () => {
               <div className="scc-icon" style={{ background: "#faf5ff", color: "#7c3aed" }}><LoaderIcon /></div>
               <div>
                 <div className="scc-label">IN PROGRESS</div>
-                <div className="scc-value">198</div>
+                <div className="scc-value">{loading ? "..." : complaintsList.filter(c => c.status === "In Progress" || c.status === "Assigned").length.toLocaleString()}</div>
                 <div className="scc-meta">Currently being resolved</div>
               </div>
             </div>
@@ -447,7 +454,7 @@ const Complaints = () => {
               <div className="scc-icon" style={{ background: "#f0fdf4", color: "#16a34a" }}><CheckIcon /></div>
               <div>
                 <div className="scc-label">RESOLVED</div>
-                <div className="scc-value">705</div>
+                <div className="scc-value">{loading ? "..." : complaintsList.filter(c => c.status === "Resolved").length.toLocaleString()}</div>
                 <div className="scc-meta">Successfully completed</div>
               </div>
             </div>

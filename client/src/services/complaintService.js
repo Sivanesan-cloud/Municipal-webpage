@@ -21,45 +21,69 @@ export const complaintService = {
   getComplaints: async (filters = {}) => {
     try {
       const complaintsCol = collection(db, COLLECTION_NAME);
-      let q = query(complaintsCol, orderBy("reportedDate", "desc"));
+      let snapshot;
 
-      // Status Filter
-      if (filters.status && filters.status !== "All Status") {
-        q = query(q, where("status", "==", filters.status));
+      // Try ordered query first; if index error occurs, fallback to simple fetch
+      try {
+        let q = query(complaintsCol, orderBy("reportedDate", "desc"));
+
+        if (filters.status && filters.status !== "All Status") {
+          q = query(q, where("status", "==", filters.status));
+        }
+        if (filters.category && filters.category !== "All Categories") {
+          q = query(q, where("category", "==", filters.category));
+        }
+        if (filters.priority && filters.priority !== "All Priorities") {
+          q = query(q, where("priority", "==", filters.priority));
+        }
+        if (filters.ward && filters.ward !== "All Wards") {
+          q = query(q, where("ward", "==", filters.ward));
+        }
+
+        snapshot = await getDocs(q);
+      } catch (queryErr) {
+        console.warn("ComplaintService: ordered query failed (index missing?), fetching all documents directly:", queryErr);
+        snapshot = await getDocs(complaintsCol);
       }
 
-      // Category Filter
-      if (filters.category && filters.category !== "All Categories") {
-        q = query(q, where("category", "==", filters.category));
-      }
-
-      // Priority Filter
-      if (filters.priority && filters.priority !== "All Priorities") {
-        q = query(q, where("priority", "==", filters.priority));
-      }
-
-      // Ward Filter
-      if (filters.ward && filters.ward !== "All Wards") {
-        q = query(q, where("ward", "==", filters.ward));
-      }
-
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => {
+      let results = snapshot.docs.map(doc => {
         const data = doc.data();
-        let formattedDate = data.date || "Oct 24, 2023";
+        let formattedDate = "";
+        
         if (data.reportedDate && typeof data.reportedDate.toDate === "function") {
           const dt = data.reportedDate.toDate();
           formattedDate = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        } else if (data.date && data.date !== "Oct 24, 2023" && data.date !== "Oct 23, 2023" && data.date !== "Oct 18, 2023" && data.date !== "Oct 17, 2023" && data.date !== "Oct 15, 2023") {
+          formattedDate = data.date;
+        } else {
+          formattedDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
         }
+
         return {
           id: doc.id,
           ...data,
-          date: formattedDate
+          date: formattedDate,
+          issue: data.issue || data.title || data.description || "Reported Civic Issue"
         };
       });
+
+      // Apply in-memory filtering if query fallback was used
+      if (filters.status && filters.status !== "All Status") {
+        results = results.filter(c => c.status === filters.status);
+      }
+      if (filters.category && filters.category !== "All Categories") {
+        results = results.filter(c => c.category === filters.category);
+      }
+      if (filters.priority && filters.priority !== "All Priorities") {
+        results = results.filter(c => c.priority === filters.priority);
+      }
+      if (filters.ward && filters.ward !== "All Wards") {
+        results = results.filter(c => c.ward === filters.ward);
+      }
+
+      return results;
     } catch (error) {
       console.error("ComplaintService.getComplaints failed:", error);
-      // Fallback placeholder during setup
       return [];
     }
   },
@@ -72,8 +96,9 @@ export const complaintService = {
       const complaintsCol = collection(db, COLLECTION_NAME);
       const newDoc = {
         ...complaintData,
-        status: complaintData.assignedOfficial !== "Unassigned" ? "Assigned" : "Pending",
+        status: complaintData.assignedOfficial && complaintData.assignedOfficial !== "Unassigned" ? "Assigned" : "Pending",
         reportedDate: serverTimestamp(),
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         timeline: [
           {
             status: "Pending",
@@ -131,7 +156,7 @@ export const complaintService = {
   assignOfficial: async (id, officialName) => {
     try {
       const docRef = doc(db, COLLECTION_NAME, id);
-      const isAssign = officialName !== "Unassigned";
+      const isAssign = officialName && officialName !== "Unassigned";
       const status = isAssign ? "Assigned" : "Pending";
       const updateData = {
         assignedOfficial: officialName,

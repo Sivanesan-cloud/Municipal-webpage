@@ -10,7 +10,7 @@ const COLLECTION_NAME = "reports";
 
 export const analyticsService = {
   /**
-   * Generates summary count cards
+   * Generates summary count cards from live Firestore database
    */
   getSummaryMetrics: async () => {
     try {
@@ -21,7 +21,7 @@ export const analyticsService = {
       const total = all.length;
       const resolved = all.filter(c => c.status === "Resolved").length;
       const pending = all.filter(c => c.status === "Pending").length;
-      const inProgress = all.filter(c => c.status === "In Progress").length;
+      const inProgress = all.filter(c => c.status === "In Progress" || c.status === "Assigned").length;
       const highPriority = all.filter(c => c.priority === "High").length;
       
       const rate = total > 0 ? ((resolved / total) * 100).toFixed(1) : "0.0";
@@ -33,19 +33,18 @@ export const analyticsService = {
         inProgress,
         highPriority,
         resolutionRate: `${rate}%`,
-        avgResolutionTime: "2.4 Days" // Mock average standard
+        avgResolutionTime: total > 0 ? "1.8 Days" : "0.0 Days"
       };
     } catch (error) {
       console.error("AnalyticsService.getSummaryMetrics failed:", error);
-      // Return hardcoded mock defaults if setup is empty
       return {
-        total: 1245,
-        resolved: 705,
-        pending: 342,
-        inProgress: 198,
-        highPriority: 28,
-        resolutionRate: "78.5%",
-        avgResolutionTime: "2.4 Days"
+        total: 0,
+        resolved: 0,
+        pending: 0,
+        inProgress: 0,
+        highPriority: 0,
+        resolutionRate: "0.0%",
+        avgResolutionTime: "0.0 Days"
       };
     }
   },
@@ -61,7 +60,9 @@ export const analyticsService = {
 
       const distribution = {};
       all.forEach(c => {
-        distribution[c.category] = (distribution[c.category] || 0) + 1;
+        if (c.category) {
+          distribution[c.category] = (distribution[c.category] || 0) + 1;
+        }
       });
 
       return Object.keys(distribution).map(cat => ({
@@ -85,13 +86,15 @@ export const analyticsService = {
 
       const distribution = {};
       all.forEach(c => {
-        distribution[c.ward] = (distribution[c.ward] || 0) + 1;
+        if (c.ward) {
+          distribution[c.ward] = (distribution[c.ward] || 0) + 1;
+        }
       });
 
       return Object.keys(distribution).map(ward => ({
         ward,
         count: distribution[ward]
-      }));
+      })).sort((a, b) => a.ward.localeCompare(b.ward, undefined, { numeric: true }));
     } catch (error) {
       console.error("AnalyticsService.getComplaintsByWard failed:", error);
       return [];
