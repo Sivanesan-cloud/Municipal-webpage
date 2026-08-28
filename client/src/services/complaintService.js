@@ -1,6 +1,7 @@
 import { 
   collection, 
   doc, 
+  getDoc,
   getDocs, 
   addDoc, 
   updateDoc, 
@@ -151,15 +152,28 @@ export const complaintService = {
   },
 
   /**
-   * Assigns a field official to a complaint
+   * Assigns a field official to a complaint and updates official workload
    */
   assignOfficial: async (id, officialName) => {
     try {
       const docRef = doc(db, COLLECTION_NAME, id);
       const isAssign = officialName && officialName !== "Unassigned";
       const status = isAssign ? "Assigned" : "Pending";
+
+      // 1. Fetch current document to check previous official
+      let previousOfficial = null;
+      try {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          previousOfficial = snap.data().assignedOfficial;
+        }
+      } catch (e) {
+        /* skip read error */
+      }
+
+      // 2. Update report doc in Firestore
       const updateData = {
-        assignedOfficial: officialName,
+        assignedOfficial: officialName || "Unassigned",
         status,
         timeline: arrayUnion({
           status,
@@ -168,6 +182,42 @@ export const complaintService = {
         })
       };
       await updateDoc(docRef, updateData);
+
+      // 3. Update workload in OFFICIALS collection
+      if (isAssign && officialName !== previousOfficial) {
+        try {
+          const offCol = collection(db, "OFFICIALS");
+          const qNew = query(offCol, where("name", "==", officialName));
+          const snapNew = await getDocs(qNew);
+          snapNew.docs.forEach(async (d) => {
+            const current = d.data().assignedComplaints || 0;
+            const maxCap  = d.data().maximumCapacity || 10;
+            const nextVal = current + 1;
+            const newAvail = nextVal >= maxCap ? "Full" : nextVal >= maxCap * 0.8 ? "Limited" : "Available";
+            await updateDoc(doc(db, "OFFICIALS", d.id), {
+              assignedComplaints: nextVal,
+              availability: newAvail
+            });
+          });
+
+          // Decrement previous official workload if replaced
+          if (previousOfficial && previousOfficial !== "Unassigned") {
+            const qOld = query(offCol, where("name", "==", previousOfficial));
+            const snapOld = await getDocs(qOld);
+            snapOld.docs.forEach(async (d) => {
+              const current = Math.max(0, (d.data().assignedComplaints || 0) - 1);
+              const maxCap  = d.data().maximumCapacity || 10;
+              const newAvail = current >= maxCap ? "Full" : current >= maxCap * 0.8 ? "Limited" : "Available";
+              await updateDoc(doc(db, "OFFICIALS", d.id), {
+                assignedComplaints: current,
+                availability: newAvail
+              });
+            });
+          }
+        } catch (offErr) {
+          console.warn("Could not update OFFICIALS workload doc:", offErr);
+        }
+      }
     } catch (error) {
       console.error("ComplaintService.assignOfficial failed:", error);
       throw error;

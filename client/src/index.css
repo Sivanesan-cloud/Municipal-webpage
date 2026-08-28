@@ -6,18 +6,18 @@
   --sidebar-w: 185px;
   --navbar-h: 60px;
   --primary: #3b82f6;
-  --sidebar-bg: #1a2236;
-  --page-bg: #f1f5f9;
+  --sidebar-bg: #17233C;
+  --page-bg: #F5F6F2;
   --card-bg: #ffffff;
-  --text-dark: #0f172a;
-  --text-medium: #475569;
+  --text-dark: #17233C;
+  --text-medium: #667085;
   --text-light: #94a3b8;
-  --border: #e2e8f0;
-  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,.1);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --radius-xs: 6px;
+  --border: #D9DEE5;
+  --shadow: 0 1px 3px rgba(0,0,0,.03), 0 1px 2px rgba(0,0,0,.02);
+  --shadow-md: 0 3px 8px rgba(0,0,0,.05);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-xs: 4px;
 }
 
 body {

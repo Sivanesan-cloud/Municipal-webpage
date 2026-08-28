@@ -3,6 +3,8 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import StatCard from "../components/StatCard";
 import complaintService from "../services/complaintService";
+import officialService from "../services/officialService";
+import wardService from "../services/wardService";
 
 /* ── CONSTANTS & OPTIONS ── */
 const STATUS_OPTIONS = ["All Status", "Pending", "Assigned", "In Progress", "Resolved"];
@@ -11,8 +13,6 @@ const PRIORITY_OPTIONS = ["All Priorities", "High", "Medium", "Low"];
 const WARD_OPTIONS = ["All Wards", ...Array.from({ length: 15 }, (_, i) => `Ward ${i + 1}`)];
 const DEPT_OPTIONS = ["All Departments", "Roads", "Electrical", "Sanitation", "Water Supply", "Drainage"];
 const DATE_OPTIONS = ["All Dates", "Today", "Yesterday", "Last 7 Days", "Last 30 Days", "Custom Range"];
-
-const OFFICIALS = ["Unassigned", "Raj Kumar", "Arun Kumar", "Karthik", "Ravi Kumar", "Suresh"];
 
 /* ── DEFAULTS ── */
 const today = new Date();
@@ -724,6 +724,7 @@ const Complaints = () => {
 
 /* ── MODAL SUB-COMPONENTS ── */
 const CreateModal = ({ onClose, onCreate }) => {
+  const [liveOfficials, setLiveOfficials] = useState([]);
   const [form, setForm] = useState({
     issue: "",
     category: "Potholes",
@@ -733,6 +734,10 @@ const CreateModal = ({ onClose, onCreate }) => {
     priority: "Medium",
     official: "Unassigned"
   });
+
+  useEffect(() => {
+    officialService.getOfficials().then(setLiveOfficials);
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -805,7 +810,12 @@ const CreateModal = ({ onClose, onCreate }) => {
                 value={form.official}
                 onChange={(e) => setForm({ ...form, official: e.target.value })}
               >
-                {OFFICIALS.map(opt => <option key={opt}>{opt}</option>)}
+                <option value="Unassigned">Unassigned</option>
+                {liveOfficials.map(opt => (
+                  <option key={opt.id || opt.name} value={opt.name}>
+                    {opt.name} ({opt.ward || "Field Official"})
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -844,6 +854,61 @@ const CreateModal = ({ onClose, onCreate }) => {
 };
 
 const DetailsModal = ({ complaint: c, onClose, onAssignOfficial, onStatusChange, onPriorityChange }) => {
+  const [wardOfficials, setWardOfficials] = useState([]);
+  const [allOfficials, setAllOfficials]   = useState([]);
+  const [loadingOfficials, setLoadingOfficials] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadWardOfficials = async () => {
+      setLoadingOfficials(true);
+      try {
+        // Fetch all field officials from OFFICIALS collection
+        const liveList = await officialService.getOfficials();
+        if (!isMounted) return;
+        setAllOfficials(liveList);
+
+        // Format ward ID for WARDS collection e.g. "Ward 3" -> "WARD03"
+        let wardId = c.ward || "";
+        const numMatch = wardId.match(/\d+/);
+        if (numMatch) {
+          const num = parseInt(numMatch[0], 10);
+          wardId = `WARD${num < 10 ? "0" + num : num}`;
+        }
+
+        // Fetch resolved ward doc from WARDS collection
+        const wardDoc = await wardService.getWardWithOfficials(wardId);
+        
+        const wardOffs = [];
+        if (wardDoc && wardDoc.officials) {
+          Object.values(wardDoc.officials).forEach(o => {
+            if (o && o.name && !wardOffs.some(existing => existing.name === o.name)) {
+              wardOffs.push(o);
+            }
+          });
+        }
+
+        // Add officials from OFFICIALS collection whose ward matches
+        liveList.forEach(o => {
+          if (o.ward && (o.ward === c.ward || o.ward.toLowerCase() === (c.ward || "").toLowerCase())) {
+            if (!wardOffs.some(existing => existing.name === o.name)) {
+              wardOffs.push(o);
+            }
+          }
+        });
+
+        if (isMounted) setWardOfficials(wardOffs);
+      } catch (err) {
+        console.error("Failed to load ward officials for DetailsModal:", err);
+      } finally {
+        if (isMounted) setLoadingOfficials(false);
+      }
+    };
+
+    loadWardOfficials();
+    return () => { isMounted = false; };
+  }, [c.ward]);
+
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="od-panel" style={{ maxWidth: "780px" }}>
@@ -911,7 +976,7 @@ const DetailsModal = ({ complaint: c, onClose, onAssignOfficial, onStatusChange,
             <div className="od-section-title">Citizen Attachment</div>
             {c.img ? (
               <div className="c-detail-img-wrap">
-                <img src={c.img} alt="Pothole" />
+                <img src={c.img} alt="Attachment" />
               </div>
             ) : (
               <div className="c-detail-no-img">
@@ -928,11 +993,31 @@ const DetailsModal = ({ complaint: c, onClose, onAssignOfficial, onStatusChange,
                 <label className="form-label" style={{ fontSize: "11px" }}>Reassign Official</label>
                 <select
                   className="form-input"
-                  value={c.official}
+                  value={c.official || "Unassigned"}
                   onChange={(e) => onAssignOfficial(c.id, e.target.value)}
                   style={{ padding: "6px 8px", fontSize: "12px" }}
                 >
-                  {OFFICIALS.map(opt => <option key={opt}>{opt}</option>)}
+                  <option value="Unassigned">Unassigned</option>
+                  
+                  {wardOfficials.length > 0 && (
+                    <optgroup label={`Ward Officials (${c.ward || "Current Ward"})`}>
+                      {wardOfficials.map(o => (
+                        <option key={o.id || o.name} value={o.name}>
+                          {o.name} {o.department ? `(${o.department})` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  <optgroup label="All Database Officials">
+                    {allOfficials
+                      .filter(o => !wardOfficials.some(w => w.name === o.name))
+                      .map(o => (
+                        <option key={o.id || o.name} value={o.name}>
+                          {o.name} ({o.ward || "Field Official"})
+                        </option>
+                      ))}
+                  </optgroup>
                 </select>
               </div>
 

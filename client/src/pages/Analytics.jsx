@@ -47,42 +47,42 @@ const trendOptions = {
   interaction: { mode: "index", intersect: false },
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: "#0f172a", titleColor: "#fff", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8 },
+    tooltip: { backgroundColor: "#17233C", titleColor: "#fff", bodyColor: "#94a3b8", padding: 10, cornerRadius: 6 },
   },
   scales: {
-    x: { grid: { display: false }, ticks: { font: { size: 11, family: "Inter" }, color: "#94a3b8" } },
-    y: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10, family: "Inter" }, color: "#94a3b8" } },
+    x: { grid: { display: false }, ticks: { font: { size: 11, family: "Inter" }, color: "#667085" } },
+    y: { grid: { color: "#E5E7EB" }, ticks: { font: { size: 10, family: "Inter" }, color: "#667085" } },
   },
 };
 const catOptions = {
   indexAxis: "y", responsive: true, maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: "#0f172a", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8,
+    tooltip: { backgroundColor: "#17233C", bodyColor: "#94a3b8", padding: 10, cornerRadius: 6,
       callbacks: { label: ctx => `  ${ctx.parsed.x} complaints` } },
   },
   scales: {
-    x: { grid: { color: "#f1f5f9" }, ticks: { font: { size: 10, family: "Inter" }, color: "#94a3b8" } },
-    y: { grid: { display: false }, ticks: { font: { size: 11.5, family: "Inter" }, color: "#475569" } },
+    x: { grid: { color: "#E5E7EB" }, ticks: { font: { size: 10, family: "Inter" }, color: "#667085" } },
+    y: { grid: { display: false }, ticks: { font: { size: 11.5, family: "Inter" }, color: "#17233C" } },
   },
 };
 const wardOptions = {
   responsive: true, maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: "#0f172a", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8,
+    tooltip: { backgroundColor: "#17233C", bodyColor: "#94a3b8", padding: 10, cornerRadius: 6,
       callbacks: { label: ctx => `  ${ctx.parsed.y} complaints` } },
   },
   scales: {
-    x: { grid: { display: false }, ticks: { font: { size: 10.5, family: "Inter" }, color: "#475569" } },
-    y: { grid: { color: "#f1f5f9" }, ticks: { stepSize: 50, font: { size: 10, family: "Inter" }, color: "#94a3b8" } },
+    x: { grid: { display: false }, ticks: { font: { size: 10.5, family: "Inter" }, color: "#17233C" } },
+    y: { grid: { color: "#E5E7EB" }, ticks: { stepSize: 50, font: { size: 10, family: "Inter" }, color: "#667085" } },
   },
 };
 const resDoughnutOptions = {
   responsive: true, maintainAspectRatio: false, cutout: "76%",
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: "#0f172a", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8,
+    tooltip: { backgroundColor: "#17233C", bodyColor: "#94a3b8", padding: 10, cornerRadius: 6,
       callbacks: { label: ctx => `  ${ctx.label}: ${ctx.parsed}` } },
   },
   animation: { animateRotate: true, duration: 900 },
@@ -91,12 +91,12 @@ const avgTimeOptions = {
   indexAxis: "y", responsive: true, maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: "#0f172a", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8,
+    tooltip: { backgroundColor: "#17233C", bodyColor: "#94a3b8", padding: 10, cornerRadius: 6,
       callbacks: { label: ctx => `  ${ctx.parsed.x} days avg` } },
   },
   scales: {
-    x: { min: 0, grid: { color: "#f1f5f9" }, ticks: { font: { size: 10, family: "Inter" }, color: "#94a3b8", callback: v => `${v}d` } },
-    y: { grid: { display: false }, ticks: { font: { size: 11.5, family: "Inter" }, color: "#475569" } },
+    x: { min: 0, grid: { color: "#E5E7EB" }, ticks: { font: { size: 10, family: "Inter" }, color: "#667085", callback: v => `${v}d` } },
+    y: { grid: { display: false }, ticks: { font: { size: 11.5, family: "Inter" }, color: "#17233C" } },
   },
 };
 
